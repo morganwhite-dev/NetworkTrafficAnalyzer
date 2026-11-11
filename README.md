@@ -1,8 +1,199 @@
 # Network Traffic Analyzer
 
-Status: being built. The full README with screenshots lands in Phase 9.
+[![CI](https://github.com/morganwhite-dev/NetworkTrafficAnalyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/morganwhite-dev/NetworkTrafficAnalyzer/actions/workflows/ci.yml)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-00ff41?labelColor=12151c)
+![macOS](https://img.shields.io/badge/macOS-en0%20ready-00f3ff?labelColor=12151c)
+[![MIT License](https://img.shields.io/badge/license-MIT-d7dde8?labelColor=12151c)](LICENSE)
 
-## Build progress
+**A live look at what my Mac is actually saying on the network.** When something looks off, the part of the network that's causing it turns red.
+
+![The dashboard in demo mode: a bandwidth hog, a port-scanning smart TV and a password sent over plain HTTP, all flagged](docs/screenshots/dashboard.png)
+
+## Why I built it
+
+I wanted to see what my Mac is actually doing on the network in real time. Wireshark can answer that, but it's a wall of packets, and I wanted something I could glance at. So I built a dashboard that captures my Mac's traffic live and draws my home network as a little 3D map: my Mac, the router, the other devices on my Wi-Fi, and every server on the internet I'm talking to. Normal traffic flows along the lines in green. When something's wrong (one server hogging the bandwidth, a device scanning my ports, a password going out without encryption), that node turns red and a card in the corner tells me what happened in plain words.
+
+![The network map animating](docs/screenshots/demo.gif)
+
+## Features
+
+- **Live packet capture** on any macOS interface (Wi-Fi `en0` by default), plus a **demo replay** that needs no root at all
+- **Isometric network map:** this Mac, the router, home devices and internet hosts, with packets flowing along each link at a speed that matches the real throughput
+- **Flows view:** ribbons sized by each host's share of your bandwidth, so a hog is obvious at a glance
+- **Threat and anomaly alerts** that turn the guilty node red: port scans, host sweeps, passwords sent in cleartext, traffic spikes, bandwidth hogs, ARP/NDP spoofing, DNS tunneling, rogue DHCP servers and routers, and VPN leaks ([what each one means](docs/DETECTIONS.md))
+- **Protocol parsing** for TCP, UDP, ICMP, DNS, mDNS, DHCP, HTTP, TLS (with the server name from the handshake), QUIC and ARP, with timestamps, addresses, ports, lengths and flags
+- **Filter bar** with a small query language: `ip == 192.168.1.10`, `proto == TLS and len > 1000`, `port == 53 || port == 443` ([cheat sheet](docs/FILTERS.md))
+- **Packet inspector** with decoded headers and a Hex/ASCII dump. Bytes are tinted by layer, and passwords are blurred until you click.
+- **Geo-IP world map** that works offline (no API key and no lookups leaving your Mac)
+- **Upload a `.pcap` / `.pcapng`** to analyse it, and **export the session** as a `.pcap` for Wireshark
+- **Bandwidth chart** that goes red during a spike, and a **protocol breakdown**
+- **Synthesized sound cues** (Web Audio, no audio files) when capture starts or a high-severity alert fires, with a mute toggle that remembers your choice
+- **Built to be safe to run:** root only for a split second, a per-launch access token, a strict CSP, and hostile-file handling ([details](SECURITY.md))
+
+## Tech stack
+
+| Layer               | What I used                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| Capture and parsing | Python, [Scapy](https://scapy.net/) (BPF on macOS)                                                   |
+| Server              | [FastAPI](https://fastapi.tiangolo.com/), WebSockets, uvicorn                                        |
+| Dashboard           | HTML, Tailwind CSS (compiled), vanilla JavaScript modules                                            |
+| Charts and map      | [Chart.js](https://www.chartjs.org/), [Leaflet](https://leafletjs.com/) with a Natural Earth outline |
+| Network view        | Hand-built isometric SVG, no 3D library                                                              |
+| Geo-IP              | [DB-IP](https://db-ip.com/) City Lite offline database (or ip-api.com, opt-in)                       |
+| Packaging           | Python venv, Docker, docker compose                                                                  |
+| CI                  | GitHub Actions: ruff, pytest, Node tests, pip-audit, CodeQL, gitleaks                                |
+
+## Get it running on macOS
+
+You'll need Python 3.11 or newer (`brew install python` if you don't have it).
+
+```bash
+git clone https://github.com/morganwhite-dev/NetworkTrafficAnalyzer.git
+cd NetworkTrafficAnalyzer
+scripts/setup.sh --geoip
+```
+
+That creates a `.venv`, installs hash-checked dependencies, and downloads the offline Geo-IP database (about 57 MB). Leave off `--geoip` if you don't want the map.
+
+### Try the demo first (no root needed)
+
+```bash
+scripts/run.sh --replay samples/demo.pcap --loop
+```
+
+Open the link it prints (it looks like `http://localhost:8000/?t=…`). The demo is 90 seconds of made-up home traffic on a loop. Around 20 seconds in, a login form goes out over plain HTTP. At 35 seconds the "smart TV" port-scans the Mac, and at 50 seconds one server starts hogging the bandwidth.
+
+### Capture your own traffic
+
+Live capture reads raw packets from `/dev/bpf*`, which macOS only lets root touch by default. You have two options.
+
+**Option 1 (recommended): ChmodBPF.** This is the small helper Wireshark uses. It gives your user read access to the capture devices, so the app never needs root:
+
+```bash
+brew install --cask wireshark-chmodbpf
+```
+
+Log out and back in once, then:
+
+```bash
+scripts/run.sh
+```
+
+**Option 2: sudo.**
+
+```bash
+sudo scripts/run.sh
+```
+
+Here's why `sudo` is reasonably safe here: the app only needs root to _open_ the capture device. Right after that it switches back to your user, checks that it can't get root back, and only then starts the web server. Nothing that parses packets or talks to your browser ever runs as root. The catch is that you pick the interface at startup (`sudo scripts/run.sh --iface en5`).
+
+Either way, the link printed in your terminal contains a one-time token. The dashboard won't open without it, which keeps other websites and other users on your Mac from reading your traffic through `localhost`.
+
+### Handy flags
+
+| Flag                         | Does                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| `--iface en0`                | interface to capture on                                                     |
+| `--replay FILE --loop`       | play a capture back in real time                                            |
+| `--geo off` / `--geo ip-api` | turn the map off, or use the online lookup (sends public IPs to ip-api.com) |
+| `--port 8000`                | dashboard port                                                              |
+
+## Docker (optional)
+
+```bash
+docker compose up
+```
+
+Then open the link from `docker compose logs`. The container runs the demo and accepts `.pcap` uploads.
+
+One thing to know: **Docker on a Mac can't capture your Mac's Wi-Fi.** Docker Desktop runs containers inside a Linux virtual machine, so `en0` doesn't exist in there. Use Docker for the demo and for analysing files, and run the app directly for live capture. On a **Linux** machine, live capture in Docker works:
+
+```bash
+NTA_IFACE=eth0 docker compose --profile linux-capture up capture
+```
+
+That profile uses host networking, keeps the dashboard on `127.0.0.1`, and only adds the `NET_RAW` capability. The default service runs read-only with every capability dropped.
+
+## Screenshots
+
+|                                                                                                     |                                                                                                                               |
+| --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| ![Network map](docs/screenshots/netview-map.png) **Map:** your network in 3D. Red means look here.  | ![Hover card](docs/screenshots/netview-hover.png) **Hover a host** for its rate, share, first-seen time and a 60 s sparkline. |
+| ![Flows](docs/screenshots/netview-flows.png) **Flows:** who's using your bandwidth, sized by share. | ![Alerts](docs/screenshots/alerts.png) **Alerts** in plain words, with masked secrets you can reveal.                         |
+| ![Filter](docs/screenshots/filter.png) **Filter** to one device and protocol.                       | ![Inspector](docs/screenshots/inspector.png) **Inspector** with decoded layers and a Hex/ASCII dump.                          |
+
+![Charts and Geo-IP map](docs/screenshots/charts-geo.png)
+
+Every screenshot comes from the bundled demo capture, so none of them show real traffic. To regenerate them, start the demo with `NTA_TOKEN=shots` and run `scripts/capture_screenshots.py`.
+
+## Everyday uses
+
+- **Checking for VPN leaks.** Connect your VPN and capture on `en0`. Nearly everything should go to your VPN server. Anything else gets flagged as a possible leak.
+- **Finding what's eating your bandwidth.** The Flows tab ranks every host by share. Spot the hog, click it, and the packet table filters down to that host.
+- **Catching logins without encryption.** Any password, token or cookie sent over plain HTTP, FTP, POP3, IMAP or SMTP shows up as a critical alert (masked until you click Reveal).
+- **Seeing what your smart devices do.** TVs, printers and speakers show up on the map with their own names, so you can see who they talk to.
+- **Analysing a `.pcap`.** Open a capture from Wireshark or `tcpdump` with "Open file" and get the same map, alerts and charts in a couple of seconds.
+- **Learning how networking actually works.** Watch a DNS lookup, a TLS handshake and a page load happen live, then inspect each one byte by byte.
+
+## Filter cheat sheet
+
+| Type                               | To see                                                            |
+| ---------------------------------- | ----------------------------------------------------------------- |
+| `ip == 192.168.1.10`               | anything to or from one address                                   |
+| `ip == 10.0.0.0/8`                 | a whole range                                                     |
+| `proto == TLS`                     | encrypted web traffic (`TCP` and `UDP` include everything on top) |
+| `port == 53`                       | DNS                                                               |
+| `len > 1400`                       | big packets                                                       |
+| `info contains "Client Hello"`     | new TLS connections and the sites they're for                     |
+| `not proto == TLS and dport == 80` | plain web requests                                                |
+
+More in [docs/FILTERS.md](docs/FILTERS.md).
+
+## How it works
+
+One Python process captures packets on a background thread, analyses them on a second thread, and streams batched updates to the browser over a WebSocket every 200 ms. The dashboard never parses packets itself. It just draws what it's told. Every buffer has a size cap, so a packet flood can't eat your memory. The full picture, including the message types and API, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the design rules for the look are in [docs/DESIGN.md](docs/DESIGN.md).
+
+## Project structure
+
+```text
+NetworkTrafficAnalyzer/
+├── backend/app/          capture, parsing, detectors, host tracker, Geo-IP, FastAPI app
+├── backend/tests/        pytest suite (parser, API security, detectors, Geo-IP)
+├── frontend/             dashboard: index.html, css/, js/, vendored libraries
+├── frontend/tests/       Node tests for the filter language and network layout
+├── samples/demo.pcap     90 s of synthetic traffic for the demo
+├── scripts/              setup, run, Geo-IP download, demo builder, screenshots, vendoring
+├── docs/                 architecture, detections, filters, design, troubleshooting, screenshots
+├── Dockerfile
+└── docker-compose.yml
+```
+
+## Development
+
+```bash
+.venv/bin/pip install --require-hashes -r requirements-dev.txt
+.venv/bin/pytest                                  # backend tests
+node --test "frontend/tests/*.test.mjs"           # filter and layout tests
+.venv/bin/ruff check backend scripts              # lint
+npm install && npm run build:css                  # only if you change Tailwind classes
+```
+
+## Troubleshooting
+
+Permission errors, picking the right interface, an empty map and a few other things are covered in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
+## Please use it responsibly
+
+Only capture traffic on networks you own or have permission to monitor. Capturing other people's traffic without consent is illegal in a lot of places (wiretapping laws), even on a shared Wi-Fi. This is a tool for understanding your own network.
+
+## License and credits
+
+MIT, see [LICENSE](LICENSE).
+
+Geo-IP data by [DB-IP.com](https://db-ip.com) (CC BY 4.0). World outline from [Natural Earth](https://www.naturalearthdata.com/) via world-atlas (public domain). Icons from [Tabler Icons](https://tabler.io/icons) (MIT). Font: [JetBrains Mono](https://www.jetbrains.com/lp/mono/) (OFL). Charts by Chart.js (MIT), map by Leaflet (BSD-2).
+
+<details>
+<summary>Build log</summary>
 
 - [x] Phase 1: project scaffold (pinned, hash-checked dependencies; Scapy 2.8 on Python 3.14)
 - [x] Phase 2: packet parser and store (parser, byte-capped ring buffer, PCAP export, credential masking, tests)
@@ -12,4 +203,6 @@ Status: being built. The full README with screenshots lands in Phase 9.
 - [x] Phase 6: dashboard UI
 - [x] Phase 7: isometric network view (Map and Flows)
 - [x] Phase 8: Docker and CI
-- [ ] Phase 9: docs, screenshots and README
+- [x] Phase 9: docs, screenshots and README
+
+</details>
