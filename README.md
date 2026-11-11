@@ -11,5 +11,5 @@ Status: being built. The full README with screenshots lands in Phase 9.
 - [x] Phase 5: Geo-IP lookup (offline DB-IP, opt-in ip-api)
 - [x] Phase 6: dashboard UI
 - [x] Phase 7: isometric network view (Map and Flows)
-- [ ] Phase 8: Docker and CI
+- [x] Phase 8: Docker and CI
 - [ ] Phase 9: docs, screenshots and README
