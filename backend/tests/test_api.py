@@ -88,6 +88,7 @@ def test_upload_analyse_inspect_export(authed):
     assert [layer["name"] for layer in pkt["layers"]][:3] == ["Ethernet", "IP", "TCP"]
     start, end = pkt["secrets"][0]
     assert bytes.fromhex(pkt["hex"])[start:end] == b"hunter2"
+    assert "hunter2" not in str(pkt["layers"])        # masked in the decoded fields too
 
     exported = rdpcap(io.BytesIO(authed.get("/api/export.pcap").content))
     assert len(exported) == 62

@@ -257,7 +257,8 @@ class HostTracker:
         h = self.hosts.get(addr)
         if h is None:
             return
-        if h.severity is None or SEVERITY_RANK[severity] >= SEVERITY_RANK.get(h.severity, 0):
+        if (h.severity is None or alert_id == h.alert_id
+                or SEVERITY_RANK[severity] >= SEVERITY_RANK.get(h.severity, 0)):
             h.severity, h.title, h.reason, h.alert_id = severity, title, reason, alert_id
         h.flagged_until = max(h.flagged_until, until)
 

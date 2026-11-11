@@ -23,7 +23,7 @@ from .detectors import AlertBook, Engine
 from .geoip import GeoResolver
 from .hosts import HostTracker
 from .parser import CLEARTEXT_LOGIN_PORTS, dissect, facts_from, layer_tree, link_type_of, row
-from .redact import HTTP_METHODS, find_secrets
+from .redact import HTTP_METHODS, MASK, find_secrets, mask_text
 from .stats import Stats
 from .store import PacketStore
 
@@ -128,7 +128,9 @@ class Pipeline:
             skipped, self.out_skipped = self.out_skipped, 0
             alerts = [a.to_dict() for a in self.alerts.fresh]
             self.alerts.fresh.clear()
-        return rows, skipped, alerts
+            updated = [a.to_dict() for a in self.alerts.updated]
+            self.alerts.updated.clear()
+        return rows, skipped, alerts + [{**u, "update": True} for u in updated]
 
     def stats_message(self) -> dict[str, Any]:
         with self.lock:
@@ -202,9 +204,18 @@ class Pipeline:
             raw, linktype, ts, r, secrets = rec.raw, rec.linktype, rec.ts, rec.row, rec.secrets
         pkt = dissect(raw, linktype)
         shown = raw[:65536]
+        layers = layer_tree(pkt)
+        # Keep detected secrets out of the decoded fields too (the hex view blurs them).
+        hidden = [raw[s:e].decode("utf-8", "replace") for s, e in secrets if e - s >= 3]
+        for layer in layers:
+            for fld in layer["fields"]:
+                val = mask_text(fld["value"])
+                for sec in hidden:
+                    val = val.replace(sec, MASK)
+                fld["value"] = val
         return {"id": pid, "ts": ts, "linktype": linktype, "row": r, "caplen": len(raw),
                 "hex": shown.hex(), "truncated": len(raw) > len(shown),
-                "layers": layer_tree(pkt), "secrets": [list(s) for s in secrets]}
+                "layers": layers, "secrets": [list(s) for s in secrets]}
 
     def reveal(self, alert_id: int) -> str | None:
         with self.lock:

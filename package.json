@@ -1,0 +1,20 @@
+{
+  "name": "network-traffic-analyzer-frontend-tooling",
+  "private": true,
+  "description": "Dev-only tooling: compiles Tailwind and copies vendored browser libraries. Not needed to run the app.",
+  "scripts": {
+    "build:css": "tailwindcss -i frontend/css/tailwind.input.css -o frontend/css/tailwind.css --minify",
+    "vendor": "bash scripts/vendor.sh",
+    "test": "node --test \"frontend/tests/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@tabler/icons": "3.51.0",
+    "@tailwindcss/cli": "4.3.5",
+    "chart.js": "4.6.1",
+    "leaflet": "1.9.4",
+    "tailwindcss": "4.3.5",
+    "topojson-client": "3.1.0",
+    "world-atlas": "2.0.2"
+  }
+}

@@ -1,0 +1,4 @@
+/* Compiled to tailwind.css with `npm run build:css` (committed, so running the app needs no build). */
+@import "tailwindcss";
+@source "../index.html";
+@source "../js";

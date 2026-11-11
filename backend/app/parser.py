@@ -373,6 +373,7 @@ def row(pid: int, f: Facts) -> dict[str, Any]:
         "sport": f.sport,
         "dport": f.dport,
         "proto": f.proto,
+        "l4": f.l4,
         "len": f.length,
         "info": f.info,
     }

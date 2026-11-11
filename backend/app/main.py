@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, Response
@@ -206,7 +207,7 @@ def create_app(rt: Runtime) -> FastAPI:
             declared = request.headers.get("content-length")
             if declared and declared.isdigit() and int(declared) > s.max_upload_bytes:
                 raise HTTPException(413, f"File is larger than {s.max_upload_bytes // 2**20} MB.")
-            name = clean(request.headers.get("x-nta-filename", "upload.pcap"), 80)
+            name = clean(unquote(request.headers.get("x-nta-filename", "upload.pcap")), 80)
             src = rt.workdir / "upload.bin"
             dst = rt.workdir / "upload.norm.pcap"
             total, head = 0, b""
@@ -297,3 +298,4 @@ def load_file(rt: Runtime, path: Path, name: str) -> None:
         p.engine.advance(last + 2)
         p.out_rows.clear()
         p.alerts.fresh.clear()
+        p.alerts.updated.clear()

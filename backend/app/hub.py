@@ -101,7 +101,8 @@ class Hub:
                                 "skipped": skipped + extra,
                                 "generation": self.pipeline.generation})
             for a in alerts:
-                self.broadcast({"type": "alert", "alert": a})
+                kind = "alert_update" if a.pop("update", False) else "alert"
+                self.broadcast({"type": kind, "alert": a})
             if n % 5 == 0:
                 await asyncio.to_thread(self.pipeline.tick)
                 if self.clients:

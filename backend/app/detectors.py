@@ -77,11 +77,23 @@ class AlertBook:
         self.max_alerts = max_alerts
         self._next = 1
         self.fresh: list[Alert] = []
+        self.updated: list[Alert] = []
+        self.by_key: dict[tuple, Alert] = {}
+        self.refreshed: Alert | None = None
 
     def add(self, key: tuple, ts: float, severity: str, kind: str, title: str, reason: str,
             hosts: list[str], cooldown: float = 60, **extra: Any) -> Alert | None:
         last = self.cooldown.get(key)
         if last is not None and ts - last < cooldown:
+            # Same incident still going: refresh its numbers instead of raising a new alert.
+            existing = self.by_key.get(key)
+            if existing is not None and existing.id in self.by_id:
+                if (existing.reason, existing.detail) != (reason, extra.get("detail", {})):
+                    existing.reason = reason
+                    existing.detail = extra.get("detail", existing.detail)
+                    if existing not in self.fresh and existing not in self.updated:
+                        self.updated.append(existing)
+                self.refreshed = existing
             return None
         self.cooldown[key] = ts
         if len(self.cooldown) > 20_000:
@@ -93,6 +105,10 @@ class AlertBook:
             self.by_id.pop(self.items[0].id, None)
         self.items.append(alert)
         self.by_id[alert.id] = alert
+        self.by_key[key] = alert
+        if len(self.by_key) > 5000:
+            for k in list(self.by_key)[:1000]:
+                del self.by_key[k]
         self.fresh.append(alert)
         return alert
 
@@ -125,6 +141,7 @@ class Engine:
         self.probes: OrderedDict[tuple, list] = OrderedDict()
         self.probe_log: dict[str, deque] = {}
         self.dirty_srcs: set[str] = set()
+        self.scan_peak: dict[str, int] = {}
         self.arp_probe_log: dict[str, deque] = {}
         # spike baseline (per-second totals, spike seconds excluded)
         self.base: deque[int] = deque(maxlen=600)
@@ -152,10 +169,13 @@ class Engine:
     def _raise(self, key: tuple, ts: float, severity: str, kind: str, title: str, reason: str,
                hosts: list[str], cooldown: float = 60, flag: list[str] | None = None,
                **extra: Any) -> Alert | None:
+        self.book.refreshed = None
         alert = self.book.add(key, ts, severity, kind, title, reason, hosts, cooldown, **extra)
-        if alert:
+        target = alert or self.book.refreshed
+        if target:
             for addr in (flag if flag is not None else hosts[:1]):
-                self.hosts.flag(addr, severity, title, reason, alert.id, ts + FLAG_HOLD)
+                self.hosts.flag(addr, target.severity, target.title, target.reason, target.id,
+                                ts + FLAG_HOLD)
         return alert
 
     @staticmethod
@@ -368,6 +388,7 @@ class Engine:
             log = self.probe_log.get(src)
             if not log:
                 self.dirty_srcs.discard(src)
+                self.scan_peak.pop(src, None)
                 continue
             self._trim(log, now, 10)
             failed, ports, lan_dsts = 0, set(), set()
@@ -384,14 +405,18 @@ class Engine:
                 targets = Counter(d for d, _, _ in ports)
                 target = targets.most_common(1)[0][0]
                 if len(targets) <= 3 or targets[target] >= 20:
+                    # Report the peak, not the shrinking tail as the window slides past.
+                    peak = max(len(ports), self.scan_peak.get(src, 0))
+                    self.scan_peak[src] = peak
                     self._raise(("scan", src), now, "high", "port_scan", "Port scan",
-                                f"{len(ports)} ports in 10 s", [src, target], cooldown=120,
-                                flag=[src], detail={"target": target, "ports": len(ports)})
+                                f"{peak} ports in 10 s", [src, target], cooldown=120,
+                                flag=[src], detail={"target": target, "ports": peak})
             if len(lan_dsts) >= 20:
                 self._raise(("sweep", src), now, "high", "host_sweep", "Host sweep",
                             f"{len(lan_dsts)} hosts probed in 10 s", [src], cooldown=120)
             if not log:
                 self.dirty_srcs.discard(src)
+                self.scan_peak.pop(src, None)
 
     def _spike_check(self, sec: int, total: int) -> None:
         n = len(self.base)

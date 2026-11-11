@@ -24,9 +24,9 @@ PUBLIC_PREFIXES = ("/static/", "/favicon")
 
 
 def csp(port: int) -> str:
-    ws = f"ws://127.0.0.1:{port} ws://localhost:{port} ws://[::1]:{port}"
+    ws = f"ws://127.0.0.1:{port} ws://localhost:{port}"
     return ("default-src 'self'; script-src 'self'; style-src 'self'; "
-            "img-src 'self' data: https://*.basemaps.cartocdn.com; font-src 'self'; "
+            "img-src 'self' data:; font-src 'self'; "
             f"connect-src 'self' {ws}; object-src 'none'; base-uri 'none'; "
             "frame-ancestors 'none'; form-action 'self'")
 

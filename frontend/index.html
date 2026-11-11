@@ -1,1 +1,174 @@
-<!doctype html><title>NTA</title>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network Traffic Analyzer</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/css/tailwind.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/vendor/chart.umd.min.js" defer></script>
+  <script src="/static/vendor/leaflet/leaflet.js" defer></script>
+  <script src="/static/js/app.js" type="module"></script>
+</head>
+<body class="min-h-full">
+  <header class="topbar">
+    <div class="flex items-center gap-3 min-w-0">
+      <span class="brand">NETWORK TRAFFIC ANALYZER</span>
+      <span class="chip" id="mode-chip"><span id="mode-text">CONNECTING</span></span>
+    </div>
+
+    <div class="flex items-center gap-2 ml-2">
+      <button class="btn btn-start" id="btn-capture" type="button">
+        <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-player-play"></use></svg>
+        <span>Start</span>
+      </button>
+      <button class="btn" id="btn-clear" type="button" title="Clear the capture">
+        <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-trash"></use></svg>
+        <span>Clear</span>
+      </button>
+      <button class="btn" id="btn-export" type="button" title="Download this session as a .pcap for Wireshark">
+        <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-download"></use></svg>
+        <span>Export PCAP</span>
+      </button>
+      <button class="btn" id="btn-upload" type="button" title="Analyse a .pcap or .pcapng file">
+        <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-upload"></use></svg>
+        <span>Open file</span>
+      </button>
+      <input type="file" id="file-input" accept=".pcap,.pcapng,.cap" class="sr-only" tabindex="-1">
+      <span class="sep"></span>
+      <label class="sr-only" for="iface-select">Interface</label>
+      <select class="select" id="iface-select" title="Network interface"></select>
+    </div>
+
+    <div class="flex items-center gap-4 ml-auto">
+      <div class="readout"><span class="label">PACKETS/S</span><span class="value" id="ro-pps">0</span></div>
+      <div class="readout"><span class="label">BANDWIDTH</span><span class="value" id="ro-bps">0 B/s</span></div>
+      <span class="sep"></span>
+      <span class="chip" id="geo-chip" title="Geo-IP provider">GEO —</span>
+      <button class="btn btn-icon" id="btn-mute" type="button" aria-label="Mute sounds" aria-pressed="false">
+        <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-volume"></use></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden>
+    <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-alert-triangle"></use></svg>
+    <span><b>Live capture unavailable.</b> <span id="banner-text"></span></span>
+  </div>
+
+  <main class="p-4 grid gap-3">
+    <section class="grid gap-3 grid-cols-12" aria-label="Network">
+      <article class="panel hud-brackets col-span-12 xl:col-span-8 h-[500px]" id="panel-network">
+        <header class="panel__head">
+          <span class="idx">01 /</span><span class="title">Network</span>
+          <div class="tabs" role="tablist" aria-label="Network view">
+            <button class="tab" role="tab" id="tab-map" aria-selected="true" aria-controls="netview">Map</button>
+            <button class="tab" role="tab" id="tab-flows" aria-selected="false" aria-controls="netview">Flows</button>
+          </div>
+          <span class="stat" id="nv-stat"></span>
+        </header>
+        <div class="panel__body">
+          <div class="netview" id="netview" role="tabpanel" aria-label="Network map"></div>
+        </div>
+      </article>
+
+      <article class="panel col-span-12 xl:col-span-4 h-[500px]">
+        <header class="panel__head">
+          <span class="idx">02 /</span><span class="title">Alerts</span>
+          <span class="stat" id="alerts-stat"></span>
+        </header>
+        <div class="panel__body"><div class="alerts" id="alerts" aria-live="polite"></div></div>
+      </article>
+    </section>
+
+    <section class="grid gap-3 grid-cols-12" aria-label="Charts">
+      <article class="panel col-span-12 lg:col-span-5 h-[220px]">
+        <header class="panel__head">
+          <span class="idx">03 /</span><span class="title">Bandwidth</span>
+          <span class="stat" id="bw-stat"></span>
+        </header>
+        <div class="panel__body"><div class="chart-wrap"><canvas id="bw-chart"></canvas></div></div>
+      </article>
+      <article class="panel col-span-12 md:col-span-6 lg:col-span-3 h-[220px]">
+        <header class="panel__head">
+          <span class="idx">04 /</span><span class="title">Protocols</span>
+        </header>
+        <div class="panel__body">
+          <div class="donut-wrap">
+            <div class="donut-box">
+              <canvas id="proto-chart" width="132" height="132"></canvas>
+              <div class="donut-center"><div><div class="n" id="proto-total">0</div><div class="l">PACKETS</div></div></div>
+            </div>
+            <table class="proto-table" id="proto-table" aria-label="Protocol shares"></table>
+          </div>
+        </div>
+      </article>
+      <article class="panel col-span-12 md:col-span-6 lg:col-span-4 h-[220px]">
+        <header class="panel__head">
+          <span class="idx">05 /</span><span class="title">Geo-IP</span>
+          <span class="stat" id="geo-stat"></span>
+        </header>
+        <div class="panel__body"><div id="geomap"></div><div class="geo-note" id="geo-note"></div></div>
+      </article>
+    </section>
+
+    <section class="flex gap-3 h-[520px]" aria-label="Packets">
+      <article class="panel flex-1">
+        <header class="panel__head">
+          <span class="idx">06 /</span><span class="title">Packets</span>
+          <div class="filterbar">
+            <label class="sr-only" for="filter-input">Filter packets</label>
+            <input class="filter-input" id="filter-input" spellcheck="false" autocomplete="off"
+                   placeholder="ip == 192.168.1.10 and proto == TLS">
+            <span class="filter-error" id="filter-error"></span>
+            <span id="filter-chip-slot"></span>
+          </div>
+          <span class="stat" id="table-stat"></span>
+        </header>
+        <div class="panel__body">
+          <div class="ptable">
+            <div class="ptable__head" role="row">
+              <span>Time</span><span>Source</span><span>Destination</span><span>Proto</span>
+              <span class="r">Len</span><span>Info</span>
+            </div>
+            <div class="ptable__scroll" id="ptable-scroll" role="grid" aria-label="Captured packets">
+              <div class="ptable__spacer" id="ptable-spacer"></div>
+            </div>
+          </div>
+          <button class="jump-live hud-notch" id="jump-live" type="button" hidden>
+            <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-arrow-down"></use></svg>
+            <span id="jump-live-text">JUMP TO LIVE</span>
+          </button>
+        </div>
+      </article>
+
+      <article class="panel inspector" id="inspector">
+        <header class="panel__head">
+          <span class="idx">07 /</span><span class="title">Inspector</span>
+          <button class="btn btn-icon ml-auto" id="btn-inspector" type="button" aria-label="Collapse inspector">
+            <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-layout-sidebar-right-collapse"></use></svg>
+          </button>
+        </header>
+        <div class="panel__body"><div class="insp-scroll" id="insp-body">
+          <div class="empty">Click a packet to see its decoded headers and a hex dump.</div>
+        </div></div>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="export-dialog">
+    <h2>Export this capture</h2>
+    <p>The full file contains every byte captured, including anything sent in cleartext (like
+      passwords on plain HTTP). "Headers only" keeps the first 128 bytes of each packet.</p>
+    <div class="actions">
+      <button class="btn" value="cancel" id="export-cancel" type="button">Cancel</button>
+      <button class="btn" id="export-headers" type="button">Headers only</button>
+      <button class="btn btn-start" id="export-full" type="button">Full capture</button>
+    </div>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="assertive"></div>
+</body>
+</html>
