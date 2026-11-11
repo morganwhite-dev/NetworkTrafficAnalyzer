@@ -1,0 +1,6 @@
+fastapi==0.162.4
+uvicorn[standard]==0.54.0
+scapy==2.8.0
+python-multipart
+maxminddb
+httpx

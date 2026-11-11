@@ -1,0 +1,29 @@
+[project]
+name = "network-traffic-analyzer"
+version = "1.0.0"
+description = "Real-time network traffic analyzer for macOS with a live dashboard"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["backend", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
+ignore = ["S101", "S110", "S603", "S607", "S311", "B008", "SIM108"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/*" = ["S", "B011"]
+"scripts/*" = ["S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "helpers"]

@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node (only used to compile Tailwind / vendor libs)
+node_modules/
+
+# Local data: Geo-IP database, caches, captures you export
+data/*
+!data/.gitkeep
+*.mmdb
+*.mmdb.gz
+exports/
+*.pcapng
+*.pcap
+!samples/demo.pcap
+
+# Screenshot tooling scratch
+.screenshot-frames/
+
+# macOS
+.DS_Store
