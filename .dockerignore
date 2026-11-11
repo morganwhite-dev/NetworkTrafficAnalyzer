@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+node_modules
+data
+docs
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.claude
+*.mmdb
+*.mmdb.gz

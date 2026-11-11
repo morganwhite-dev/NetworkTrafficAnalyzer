@@ -253,9 +253,9 @@ def create_app(rt: Runtime) -> FastAPI:
     async def ws(websocket: WebSocket) -> None:
         await rt.hub.serve(websocket)
 
-    secured = SecurityMiddleware(app, s.token, s.public_origins, s.port)
-    hosts = ALLOWED_HOSTS + (["*"] if s.allow_remote else [])
-    outer = TrustedHostMiddleware(secured, allowed_hosts=hosts)
+    secured = SecurityMiddleware(app, s.token, s.public_origins, s.public_port or s.port)
+    # Host checks stay strict even in a container: browsers reach it as localhost.
+    outer = TrustedHostMiddleware(secured, allowed_hosts=ALLOWED_HOSTS)
     return outer  # type: ignore[return-value]
 
 

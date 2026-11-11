@@ -1,0 +1,45 @@
+# docker compose up                                 -> demo replay + .pcap upload (macOS or Linux)
+# docker compose --profile linux-capture up capture -> live capture on a LINUX host's interfaces
+#
+# The dashboard is published on 127.0.0.1 only. Open the link with the token
+# from `docker compose logs`.
+
+services:
+  analyzer:
+    build: .
+    image: network-traffic-analyzer:latest
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      NTA_TOKEN: ${NTA_TOKEN:-}
+      NTA_GEO: ${NTA_GEO:-auto}
+    volumes:
+      # Optional offline Geo-IP: run scripts/download_geoip.sh on the host first.
+      - ./data:/app/data:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  capture:
+    profiles: ["linux-capture"]
+    build: .
+    image: network-traffic-analyzer:latest
+    network_mode: host          # Linux only: sees the host's interfaces
+    user: "0:0"                 # raw sockets need root *inside* the container...
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]          # ...but only this one capability
+    environment:
+      NTA_HOST: 127.0.0.1       # host networking: keep the dashboard off the LAN
+      NTA_ALLOW_REMOTE: "0"
+      NTA_IFACE: ${NTA_IFACE:-eth0}
+      NTA_TOKEN: ${NTA_TOKEN:-}
+    volumes:
+      - ./data:/app/data:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    command: ["python", "-m", "app"]

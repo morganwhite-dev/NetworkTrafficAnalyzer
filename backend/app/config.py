@@ -39,6 +39,7 @@ class Settings:
     data_dir: Path = field(default_factory=default_data_dir)
     token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
     allow_remote: bool = False
+    public_port: int | None = None   # host port when Docker maps a different one
     promisc: bool = False
 
     # Hard limits (see docs/ARCHITECTURE.md, "Limits").
@@ -53,8 +54,8 @@ class Settings:
 
     @property
     def public_origins(self) -> set[str]:
-        return {f"http://127.0.0.1:{self.port}", f"http://localhost:{self.port}",
-                f"http://[::1]:{self.port}"}
+        port = self.public_port or self.port
+        return {f"http://127.0.0.1:{port}", f"http://localhost:{port}", f"http://[::1]:{port}"}
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -72,4 +73,6 @@ class Settings:
         if env.get("NTA_TOKEN"):
             s.token = env["NTA_TOKEN"]
         s.allow_remote = env.get("NTA_ALLOW_REMOTE", "0") == "1"
+        if env.get("NTA_PUBLIC_PORT"):
+            s.public_port = int(env["NTA_PUBLIC_PORT"])
         return s

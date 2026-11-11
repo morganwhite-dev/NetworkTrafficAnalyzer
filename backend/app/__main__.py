@@ -123,8 +123,8 @@ def main(argv: list[str] | None = None) -> int:
               f"{' (looping)' if s.loop else ''}.{RESET}")
 
     app = create_app(rt)
-    shown_host = "localhost" if s.host in ("127.0.0.1", "::1") else s.host
-    url = f"http://{shown_host}:{s.port}/?t={s.token}"
+    shown_host = "localhost" if s.host in ("127.0.0.1", "::1", "0.0.0.0") else s.host  # noqa: S104
+    url = f"http://{shown_host}:{s.public_port or s.port}/?t={s.token}"
     ok, hint = capture_access()
     print(f"\n  {GREEN}Network Traffic Analyzer {__version__}{RESET}")
     print(f"  Open {CYAN}{url}{RESET}")
