@@ -148,11 +148,13 @@ def create_app(rt: Runtime) -> FastAPI:
             rt.pipeline.clear()
         try:
             await asyncio.to_thread(rt.live.start, iface)
-        except PermissionError as exc:
-            rt.live.error = "Permission denied opening the capture device."
-            raise HTTPException(403, capture_access()[1]) from exc
-        except OSError as exc:
-            rt.live.error = clean(str(exc), 200)
+        except Exception as exc:  # noqa: BLE001 - Scapy raises its own exception types
+            text = str(exc)
+            if isinstance(exc, PermissionError) or "Permission denied" in text \
+                    or "Operation not permitted" in text:
+                rt.live.error = "Permission denied opening the capture device."
+                raise HTTPException(403, capture_access()[1]) from exc
+            rt.live.error = clean(text, 200)
             raise HTTPException(409, f"Could not start capture: {rt.live.error}") from exc
         rt.pipeline.mode, rt.pipeline.source = "live", iface
         if changed:

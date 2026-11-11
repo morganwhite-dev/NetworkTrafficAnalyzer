@@ -106,3 +106,18 @@ def test_unknown_interface_rejected(authed):
     r = authed.post("/api/capture/start", json={"iface": "nope0; rm -rf /"},
                     headers=POST_HEADERS)
     assert r.status_code == 400
+
+
+def test_start_without_capture_permission_is_a_clear_403(authed):
+    import os
+
+    from scapy.all import get_if_list
+    if os.geteuid() == 0:
+        pytest.skip("running as root")
+    from app.interfaces import capture_access
+    if capture_access()[0]:
+        pytest.skip("this machine can already capture (ChmodBPF)")
+    iface = next(i for i in get_if_list() if i.startswith("lo"))
+    r = authed.post("/api/capture/start", json={"iface": iface}, headers=POST_HEADERS)
+    assert r.status_code == 403
+    assert "sudo" in r.json()["detail"] or "CAP_NET_RAW" in r.json()["detail"]
