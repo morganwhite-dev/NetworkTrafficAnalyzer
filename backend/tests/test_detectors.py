@@ -104,7 +104,8 @@ def test_dns_tunnel_pattern(pipe):
         sub = "".join(rng.choice(string.ascii_lowercase + string.digits) for _ in range(30))
         feed(pipe, dns_query(f"{sub}.tunnel-example.net"), T0 + i * 0.5)
     alert = kinds(pipe)["dns_tunnel"]
-    assert alert.severity == "medium" and "tunnel-example.net" in alert.reason
+    assert alert.severity == "medium"
+    assert alert.detail["domain"] == "tunnel-example.net"
 
 
 def test_cdn_names_do_not_trigger_dns_alert(pipe):
