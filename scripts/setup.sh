@@ -18,6 +18,10 @@ if [ ! -d .venv ]; then
 fi
 .venv/bin/python -m pip install --quiet --upgrade pip
 .venv/bin/python -m pip install --quiet --require-hashes -r requirements.txt
+if [ "$(uname)" = "Darwin" ]; then
+  # Wi-Fi signal readings for the Wi-Fi tab (Apple's CoreWLAN via PyObjC).
+  .venv/bin/python -m pip install --quiet --require-hashes -r requirements-macos.txt
+fi
 echo "Dependencies installed."
 
 if [ "${1:-}" = "--geoip" ]; then

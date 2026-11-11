@@ -1,7 +1,8 @@
 """Capture the README screenshots and demo GIF from a running demo server.
 
-1. Start the demo (replay only, so no real traffic ends up in the images):
-       NTA_TOKEN=shots scripts/run.sh --replay samples/demo.pcap --loop
+1. Start the demo (replay only, so no real traffic ends up in the images, and
+   synthetic Wi-Fi readings so your real network details stay out too):
+       NTA_TOKEN=shots NTA_WIFI_DEMO=1 scripts/run.sh --replay samples/demo.pcap --loop
 2. In another terminal:
        NTA_TOKEN=shots .venv/bin/python scripts/capture_screenshots.py
 
@@ -86,6 +87,10 @@ def main() -> int:
         page.click("#tab-flows")
         time.sleep(1.2)
         shot(page, "#panel-network", "netview-flows.png")
+        page.click("#tab-wifi")
+        print("  (collecting Wi-Fi demo readings…)")
+        time.sleep(24)
+        shot(page, "#panel-network", "netview-wifi.png")
         page.click("#tab-map")
         time.sleep(0.5)
 

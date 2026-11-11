@@ -16,6 +16,7 @@ Please use GitHub's **private vulnerability reporting** (the "Report a vulnerabi
 - **Hostile input handling.** Uploaded captures are checked by magic bytes, size-capped while streaming, and parsed in a separate process with a timeout. Every packet is parsed inside its own error handler. Everything from the wire is shown with `textContent`, never `innerHTML`.
 - **Secrets stay masked.** Detected passwords and tokens are masked in alerts, the packet table and decoded fields, and blurred in the hex dump until you click. Exports warn that they contain everything and offer a headers-only version.
 - **Privacy by default.** Geo-IP is offline (DB-IP). The online ip-api.com lookup is opt-in. Private, local and multicast addresses are never looked up.
+- **Quiet Wi-Fi check.** It never reads your network's name, and it only pings your router and `1.1.1.1` while the Wi-Fi tab is open.
 - **Bounded memory.** Every buffer has a cap, so a packet flood can't exhaust memory.
 - **Supply chain.** Python dependencies are hash-pinned, CI runs `pip-audit`, CodeQL and gitleaks, Actions are pinned to commit SHAs, and Dependabot keeps it all current.
 

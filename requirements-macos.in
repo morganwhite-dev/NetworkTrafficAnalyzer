@@ -1,0 +1,2 @@
+# macOS only: Wi-Fi signal readings through CoreWLAN (installed by scripts/setup.sh on a Mac)
+pyobjc-framework-CoreWLAN==13.0

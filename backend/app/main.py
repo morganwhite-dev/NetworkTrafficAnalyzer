@@ -27,6 +27,7 @@ from .pcapfile import PcapError, check_magic, iter_normalized, normalize_in_chil
 from .pipeline import Pipeline
 from .security import SecurityMiddleware
 from .textsafe import clean
+from .wifi import WifiMonitor
 
 ALLOWED_HOSTS = ["127.0.0.1", "localhost", "::1", "[::1]"]
 
@@ -42,6 +43,7 @@ class Runtime:
     replay_file: Path | None = None    # normalised copy of --replay
     replay_name: str = ""
     replayer: Replayer | None = None
+    wifi: WifiMonitor | None = None
     upload_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     workdir: Path = field(default_factory=lambda: Path(tempfile.mkdtemp(prefix="nta-")))
 
@@ -79,10 +81,13 @@ class Runtime:
 def create_app(rt: Runtime) -> FastAPI:
     s = rt.settings
     rt.hub.status_provider = rt.status
+    rt.hub.wifi = rt.wifi
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: FastAPI):
         tasks = [asyncio.create_task(rt.hub.run()), asyncio.create_task(rt.geo.run())]
+        if rt.wifi:
+            rt.wifi.start()
         if rt.replay_file:
             start_replay(rt)
         try:
@@ -94,6 +99,8 @@ def create_app(rt: Runtime) -> FastAPI:
             if rt.replayer:
                 rt.replayer.stop()
             rt.pipeline.close()
+            if rt.wifi:
+                rt.wifi.stop()
             shutil.rmtree(rt.workdir, ignore_errors=True)
 
     app = FastAPI(title="Network Traffic Analyzer", version=__version__, docs_url=None,

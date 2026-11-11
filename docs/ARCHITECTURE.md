@@ -49,6 +49,7 @@ With Wireshark's ChmodBPF installed, `/dev/bpf*` is readable by your user and no
 | `netview`      | every second                                 | self, gateway, home devices, top internet hosts, incidents, 60 s timeline |
 | `geo`          | every 2 seconds                              | located internet hosts                                                    |
 | `status`       | when capture state changes                   | mode, source, permission hints, Geo-IP provider                           |
+| `wifi` | every 2 seconds | link details, signal and ping samples, and the plain-language verdict |
 
 ## REST endpoints
 
@@ -86,3 +87,18 @@ Everything that grows with traffic has a cap, so a packet flood can't eat your m
 `hosts.py` charges every packet to the _remote_ side from this Mac's point of view, so the numbers add up to what crossed your interface. It classifies each address as `self`, `gateway`, `lan` or `internet` from the interface's own addresses, netmask and default route. In replay and file mode, where that isn't known, it infers "self" from which private address talks to the internet most, and the gateway from the MAC address internet-bound packets are sent to.
 
 Names come from traffic you already have (DNS answers, TLS SNI, HTTP Host, mDNS announcements, DHCP hostnames), never from extra lookups. The drawing itself is described in [DESIGN.md](DESIGN.md).
+
+## The Wi-Fi check
+
+`wifi.py` samples the Wi-Fi link every 2 seconds through Apple's CoreWLAN framework (signal, noise, channel, band, link rate). That needs no admin rights, and macOS hides the network name from apps without location access, which the app doesn't ask for. While someone has the Wi-Fi tab open, it also pings the router (from `ipconfig getoption en0 router`) and `1.1.1.1` with the system `ping`. The browser sends a keepalive every 5 seconds and the pings stop 15 seconds after the tab closes.
+
+The verdict looks at the last minute and picks one answer, in this order:
+
+| Verdict | When |
+| --- | --- |
+| Weak Wi-Fi signal | signal below −75 dBm (or under 20 dB above noise) and the router is slow |
+| Your Wi-Fi is busy | good signal, but the router takes 40 ms+ or misses 5%+ of pings |
+| Your internet connection is slow | the router is fine, but the internet adds 120 ms+ or drops 3%+ |
+| Your Wi-Fi has hiccups | normally fast, but the router spiked past 50 ms twice or more in a minute |
+| Signal is on the weak side / A little slow | milder versions of the above |
+| Wi-Fi looks healthy | none of the above |

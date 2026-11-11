@@ -33,6 +33,7 @@ class Hub:
         self.pipeline = pipeline
         self.clients: set[Client] = set()
         self.status_provider = None  # callable returning the /api/status dict
+        self.wifi = None             # WifiMonitor, when enabled
 
     def broadcast(self, message: dict[str, Any]) -> None:
         if not self.clients:
@@ -58,12 +59,20 @@ class Hub:
             snap["status"] = self.status_provider()
         self.broadcast(snap)
 
+    def wifi_message(self) -> dict[str, Any]:
+        bps = None
+        if self.pipeline.mode in ("live", "replay"):
+            bps = self.pipeline.stats_message().get("bps")
+        return self.wifi.message(bps)  # type: ignore[union-attr]
+
     async def serve(self, ws: WebSocket) -> None:
         await ws.accept()
         client = Client(ws)
         snap = await asyncio.to_thread(self.pipeline.snapshot)
         if self.status_provider:
             snap["status"] = self.status_provider()
+        if self.wifi is not None:
+            snap["wifi"] = await asyncio.to_thread(self.wifi_message)
         await ws.send_text(json.dumps(snap, separators=(",", ":"), default=str))
         self.clients.add(client)
         sender = asyncio.create_task(self._sender(client))
@@ -73,6 +82,8 @@ class Hub:
                 if msg == "ping":
                     with contextlib.suppress(asyncio.QueueFull):
                         client.queue.put_nowait('{"type":"pong"}')
+                elif msg == "wifi:on" and self.wifi is not None:
+                    self.wifi.keepalive()
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:
@@ -110,3 +121,5 @@ class Hub:
                     self.broadcast(await asyncio.to_thread(self.pipeline.netview_message))
             if n % 10 == 0 and self.clients:
                 self.broadcast(await asyncio.to_thread(self.pipeline.geo_message))
+            if n % 10 == 5 and self.clients and self.wifi is not None:
+                self.broadcast(await asyncio.to_thread(self.wifi_message))

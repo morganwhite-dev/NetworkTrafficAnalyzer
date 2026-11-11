@@ -30,6 +30,9 @@ def parse_args(argv: list[str] | None = None) -> Settings:
                         "service (sends public IPs to a third party), or off")
     p.add_argument("--geo-db", type=Path, default=s.geo_db)
     p.add_argument("--promisc", action="store_true", help="enable promiscuous mode")
+    p.add_argument("--wifi-target", default=os.environ.get("NTA_WIFI_TARGET", "1.1.1.1"),
+                   help="address the Wi-Fi check pings for internet response time "
+                        "(only while the Wi-Fi tab is open)")
     p.add_argument("--allow-remote", action="store_true", default=s.allow_remote,
                    help="allow binding to a non-loopback address (containers only)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -37,6 +40,7 @@ def parse_args(argv: list[str] | None = None) -> Settings:
     s.iface, s.replay, s.loop, s.replay_speed = a.iface, a.replay, a.loop, a.speed
     s.host, s.port, s.geo, s.geo_db = a.host, a.port, a.geo, a.geo_db
     s.promisc, s.allow_remote = a.promisc, a.allow_remote
+    s.wifi_target = a.wifi_target
     return s
 
 
@@ -68,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     from .pcapfile import PcapError, normalize_in_child
     from .pipeline import Pipeline
     from .privileges import PrivilegeError, drop_to_sudo_user, running_as_root
+    from .wifi import WifiMonitor
 
     logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
@@ -106,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     live.preopened.update(preopened)
     live.iface = iface
     rt = Runtime(s, geo, pipeline, live, Hub(pipeline), privilege=privilege)
+    rt.wifi = WifiMonitor(target=s.wifi_target)
 
     if s.replay:
         if not s.replay.exists():

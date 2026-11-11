@@ -38,4 +38,9 @@ export function connect(onMessage, onState) {
   }
 
   open();
+  return {
+    send(text) {
+      if (ws && ws.readyState === 1) ws.send(text);
+    },
+  };
 }

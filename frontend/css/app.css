@@ -1578,3 +1578,62 @@ dialog .actions {
 .incident .nums > div {
   white-space: nowrap;
 }
+
+/* ================= WI-FI TAB ================= */
+.wifiview { position: absolute; inset: 0; overflow-y: auto; }
+.wifi {
+  display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 20px;
+  padding: 16px; height: 100%; box-sizing: border-box;
+}
+.wifi-left { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.verdict {
+  background: rgba(10, 10, 12, 0.92); border: 1px solid var(--line); border-left: 2px solid var(--text-3);
+  padding: 12px 14px;
+}
+.verdict.lvl-good { border-left-color: var(--data); }
+.verdict.lvl-warn { border-left-color: var(--warn); }
+.verdict.lvl-bad { border-left-color: var(--alert); }
+.verdict .v-k { font-size: 10px; letter-spacing: 0.1em; color: var(--text-3); font-weight: 700; }
+.verdict.lvl-good .v-k { color: var(--data); }
+.verdict.lvl-warn .v-k { color: var(--warn); }
+.verdict.lvl-bad .v-k { color: var(--alert-text); }
+.verdict .v-title { font-size: 20px; font-weight: 500; color: var(--text); margin-top: 4px; line-height: 1.25; }
+.verdict .v-detail { margin: 8px 0 0; color: var(--text-2); font-size: 12px; line-height: 1.6; }
+.verdict .v-tips { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.verdict .v-tips li { font-size: 12px; color: var(--text); padding-left: 14px; position: relative; }
+.verdict .v-tips li::before { content: "›"; position: absolute; left: 0; color: var(--hi); }
+.wifi-link { display: flex; flex-wrap: wrap; gap: 6px; }
+.wifi-link .chip.warn { color: var(--warn); border-color: rgba(255, 176, 0, 0.4); }
+.wifi-note { font-size: 11px; color: var(--text-3); }
+.wifi-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; }
+.wifi-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.tile {
+  background: var(--inset); border: 1px solid var(--line-soft); padding: 10px 12px; min-width: 0;
+}
+.tile-label { display: flex; align-items: center; justify-content: space-between; font-size: 10px;
+  letter-spacing: 0.1em; color: var(--text-3); }
+.tile-value { font-size: 20px; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.tile-sub { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile.is-warn .tile-value, .tile.q-fair .tile-value { color: var(--warn); }
+.tile.is-bad .tile-value, .tile.q-weak .tile-value { color: var(--alert-text); }
+.tile.q-strong .tile-value, .tile.q-good .tile-value { color: var(--data); }
+.bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.bars span { width: 3px; background: var(--track); }
+.bars .b1 { height: 4px; } .bars .b2 { height: 7px; } .bars .b3 { height: 10px; } .bars .b4 { height: 14px; }
+.tile.q-strong .bars .on, .tile.q-good .bars .on { background: var(--data); }
+.tile.q-fair .bars .on { background: var(--warn); }
+.tile.q-weak .bars .on { background: var(--alert); }
+.wifi-chart-label { display: flex; justify-content: space-between; margin-top: 14px; font-size: 10px;
+  letter-spacing: 0.08em; color: var(--text-3); }
+.wifi-chart { position: relative; flex: 1 1 0; min-height: 0; margin-top: 4px; }
+@media (max-width: 900px) {
+  .wifi { grid-template-columns: 1fr; height: auto; }
+  .wifi-chart { min-height: 120px; }
+}
+
+.wifi-help { margin: auto 0 0; display: grid; grid-template-columns: 8ch 1fr; gap: 4px 10px; font-size: 11px; }
+.wifi-help dt { color: var(--text-2); }
+.wifi-help dd { margin: 0; color: var(--text-3); }
+
+.wifi { grid-template-rows: minmax(0, 1fr); }
+.wifi-left { min-height: 0; overflow-y: auto; padding-right: 4px; }

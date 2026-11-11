@@ -324,6 +324,7 @@ export class NetView {
   }
 
   renderStat() {
+    if (this.tab === "wifi") return;
     const v = this.view;
     const parts = [
       el("span", { text: `${v.counts?.hosts ?? 0} HOSTS` }),

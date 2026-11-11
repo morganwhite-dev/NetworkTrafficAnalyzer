@@ -65,3 +65,13 @@ If you hover the packet counter and see dropped packets, the app couldn't keep u
 ## Uploaded file is rejected
 
 Only classic `.pcap` and `.pcapng` are accepted, up to 200 MB. Compressed captures (`.pcap.gz`) are refused on purpose, so unzip them first. Files with mixed link types keep the first type and report how many packets were skipped.
+
+## The Wi-Fi tab shows no signal
+
+Signal readings use Apple's CoreWLAN through PyObjC, which `scripts/setup.sh` installs on a Mac (`requirements-macos.txt`). If you set things up by hand, install it with:
+
+```bash
+.venv/bin/pip install --require-hashes -r requirements-macos.txt
+```
+
+The router and internet response times work without it. On Linux and in Docker, only the response times are available.

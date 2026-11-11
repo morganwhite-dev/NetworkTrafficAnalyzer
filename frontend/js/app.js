@@ -10,6 +10,7 @@ import { GeoMap } from "./geomap.js";
 import { Inspector } from "./inspector.js";
 import { NetView } from "./netview.js";
 import { PacketTable } from "./table.js";
+import { WifiView } from "./wifi.js";
 import { connect } from "./ws.js";
 
 const $ = (id) => document.getElementById(id);
@@ -66,6 +67,7 @@ const alerts = new AlertsFeed({
   stat: $("alerts-stat"),
   onFocus: (ip) => focusHost(ip),
 });
+const wifi = new WifiView({ root: $("wifiview"), stat: $("nv-stat") });
 const net = new NetView({
   root: $("netview"),
   stat: $("nv-stat"),
@@ -259,6 +261,10 @@ function onMessage(msg) {
       geomap.reset();
       geomap.update(msg.geo?.items || []);
       if (!msg.packets?.length) inspector.clear();
+      if (msg.wifi) {
+        state.wifi = msg.wifi;
+        if (state.tab === "wifi") wifi.update(msg.wifi);
+      }
       break;
     }
     case "packets":
@@ -290,6 +296,10 @@ function onMessage(msg) {
       break;
     case "status":
       applyStatus(msg);
+      break;
+    case "wifi":
+      state.wifi = msg;
+      if (state.tab === "wifi") wifi.update(msg);
       break;
     default:
       break;
@@ -326,7 +336,8 @@ function applyStats(s, initial = false) {
       `${s.dropped} packets dropped because the app couldn't keep up`;
 }
 
-connect(onMessage, (st) => {
+const socket = connect(onMessage, (st) => {
+  if (st === "open" && state.tab === "wifi") socket?.send("wifi:on");
   if (st === "denied") {
     $("mode-chip").replaceChildren(
       el("span", { class: "t-alert", text: "LOCKED" }),
@@ -436,22 +447,32 @@ $("btn-mute").addEventListener("click", () => {
 });
 renderMute();
 
-for (const [id, tab] of [
+const TABS = [
   ["tab-map", "map"],
   ["tab-flows", "flows"],
-]) {
-  $(id).addEventListener("click", () => {
-    $("tab-map").setAttribute(
-      "aria-selected",
-      tab === "map" ? "true" : "false",
-    );
-    $("tab-flows").setAttribute(
-      "aria-selected",
-      tab === "flows" ? "true" : "false",
-    );
-    net.setTab(tab);
-  });
+  ["tab-wifi", "wifi"],
+];
+state.tab = "map";
+function setTab(tab) {
+  state.tab = tab;
+  for (const [id, name] of TABS) $(id).setAttribute("aria-selected", name === tab ? "true" : "false");
+  const isWifi = tab === "wifi";
+  $("netview").hidden = isWifi;
+  $("wifiview").hidden = !isWifi;
+  net.setTab(tab);
+  if (isWifi) {
+    socket.send("wifi:on"); // tells the server to start pinging
+    wifi.resize();
+    if (state.wifi) wifi.update(state.wifi);
+  } else if (net.view) {
+    net.renderStat();
+  }
 }
+for (const [id, tab] of TABS) $(id).addEventListener("click", () => setTab(tab));
+// Keep the Wi-Fi check running while its tab is open (the server stops pinging 15 s after the last one).
+setInterval(() => {
+  if (state.tab === "wifi" && !document.hidden) socket.send("wifi:on");
+}, 5000);
 
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "/" && document.activeElement !== filterInput) {

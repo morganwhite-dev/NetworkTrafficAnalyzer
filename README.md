@@ -20,6 +20,7 @@ I wanted to see what my Mac is actually doing on the network in real time. Wires
 - **Live packet capture** on any macOS interface (Wi-Fi `en0` by default), plus a **demo replay** that needs no root at all
 - **Isometric network map:** this Mac, the router, home devices and internet hosts, with packets flowing along each link at a speed that matches the real throughput
 - **Flows view:** ribbons sized by each host's share of your bandwidth, so a hog is obvious at a glance
+- **Wi-Fi check:** signal strength plus how fast your router and the internet answer, turned into one plain answer: weak signal, busy Wi-Fi, Wi-Fi hiccups, or a slow internet connection (works without capture permission)
 - **Threat and anomaly alerts** that turn the guilty node red: port scans, host sweeps, passwords sent in cleartext, traffic spikes, bandwidth hogs, ARP/NDP spoofing, DNS tunneling, rogue DHCP servers and routers, and VPN leaks ([what each one means](docs/DETECTIONS.md))
 - **Protocol parsing** for TCP, UDP, ICMP, DNS, mDNS, DHCP, HTTP, TLS (with the server name from the handshake), QUIC and ARP, with timestamps, addresses, ports, lengths and flags
 - **Filter bar** with a small query language: `ip == 192.168.1.10`, `proto == TLS and len > 1000`, `port == 53 || port == 443` ([cheat sheet](docs/FILTERS.md))
@@ -53,7 +54,7 @@ cd NetworkTrafficAnalyzer
 scripts/setup.sh --geoip
 ```
 
-That creates a `.venv`, installs hash-checked dependencies, and downloads the offline Geo-IP database (about 57 MB). Leave off `--geoip` if you don't want the map.
+That creates a `.venv`, installs hash-checked dependencies (plus Apple's CoreWLAN bindings for Wi-Fi signal readings), and downloads the offline Geo-IP database (about 57 MB). Leave off `--geoip` if you don't want the map.
 
 ### Try the demo first (no root needed)
 
@@ -97,6 +98,7 @@ Either way, the link printed in your terminal contains a one-time token. The das
 | `--replay FILE --loop`       | play a capture back in real time                                            |
 | `--geo off` / `--geo ip-api` | turn the map off, or use the online lookup (sends public IPs to ip-api.com) |
 | `--port 8000`                | dashboard port                                                              |
+| `--wifi-target 1.1.1.1` | what the Wi-Fi check pings to time the internet |
 
 ## Docker (optional)
 
@@ -121,13 +123,13 @@ That profile uses host networking, keeps the dashboard on `127.0.0.1`, and only 
 | ![Network map](docs/screenshots/netview-map.png) **Map:** your network in 3D. Red means look here.  | ![Hover card](docs/screenshots/netview-hover.png) **Hover a host** for its rate, share, first-seen time and a 60 s sparkline. |
 | ![Flows](docs/screenshots/netview-flows.png) **Flows:** who's using your bandwidth, sized by share. | ![Alerts](docs/screenshots/alerts.png) **Alerts** in plain words, with masked secrets you can reveal.                         |
 | ![Filter](docs/screenshots/filter.png) **Filter** to one device and protocol.                       | ![Inspector](docs/screenshots/inspector.png) **Inspector** with decoded layers and a Hex/ASCII dump.                          |
+| ![Wi-Fi check](docs/screenshots/netview-wifi.png) **Wi-Fi check:** one plain answer about why it's slow (demo readings shown). | ![Charts and Geo-IP map](docs/screenshots/charts-geo.png) **Bandwidth, protocols and the world map.** |
 
-![Charts and Geo-IP map](docs/screenshots/charts-geo.png)
-
-Every screenshot comes from the bundled demo capture, so none of them show real traffic. To regenerate them, start the demo with `NTA_TOKEN=shots` and run `scripts/capture_screenshots.py`.
+Every screenshot comes from the bundled demo capture and synthetic Wi-Fi readings, so none of them show a real network. To regenerate them, start the demo with `NTA_TOKEN=shots NTA_WIFI_DEMO=1` and run `scripts/capture_screenshots.py`.
 
 ## Everyday uses
 
+- **Figuring out why the Wi-Fi is slow.** Open the Wi-Fi tab while it feels slow. It tells you whether it's the signal (move closer), the Wi-Fi being busy or spiky (another device or a crowded channel), or the internet past your router (modem or provider).
 - **Checking for VPN leaks.** Connect your VPN and capture on `en0`. Nearly everything should go to your VPN server. Anything else gets flagged as a possible leak.
 - **Finding what's eating your bandwidth.** The Flows tab ranks every host by share. Spot the hog, click it, and the packet table filters down to that host.
 - **Catching logins without encryption.** Any password, token or cookie sent over plain HTTP, FTP, POP3, IMAP or SMTP shows up as a critical alert (masked until you click Reveal).

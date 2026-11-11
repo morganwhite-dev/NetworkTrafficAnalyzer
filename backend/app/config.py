@@ -41,6 +41,7 @@ class Settings:
     allow_remote: bool = False
     public_port: int | None = None   # host port when Docker maps a different one
     promisc: bool = False
+    wifi_target: str = "1.1.1.1"
 
     # Hard limits (see docs/ARCHITECTURE.md, "Limits").
     max_upload_bytes: int = 200 * 1024 * 1024
