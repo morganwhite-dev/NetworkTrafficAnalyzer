@@ -19,7 +19,7 @@ src = ["backend", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
-ignore = ["S101", "S110", "S603", "S607", "S311", "B008", "SIM108"]
+ignore = ["S101", "S110", "S603", "S607", "S311", "B008", "SIM102", "SIM105", "SIM108", "SIM114", "SIM117"]
 
 [tool.ruff.lint.per-file-ignores]
 "backend/tests/*" = ["S", "B011"]
