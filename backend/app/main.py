@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ipaddress
 import shutil
 import tempfile
 import time
@@ -18,7 +19,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import __version__
+from . import __version__, ipinfo
 from .capture import LiveCapture, Replayer
 from .config import FRONTEND_DIR, Settings
 from .geoip import GeoResolver
@@ -206,6 +207,16 @@ def create_app(rt: Runtime) -> FastAPI:
             rt.pipeline.clear()
             await rt.hub.send_snapshot_all()
         return {"ok": True}
+
+    @app.get("/api/ip/{ip}")
+    async def ip_info(ip: str) -> dict[str, Any]:
+        """Click an address, learn what it is. Looks up only the one address you asked about."""
+        try:
+            addr = str(ipaddress.ip_address(ip.split("%")[0]))
+        except ValueError as exc:
+            raise HTTPException(400, "That is not an IP address.") from exc
+        local = await asyncio.to_thread(rt.pipeline.host_info, addr)
+        return await asyncio.to_thread(ipinfo.lookup, addr, local, s.ip_lookup)
 
     @app.get("/api/packets/{pid}")
     async def packet(pid: int) -> dict[str, Any]:

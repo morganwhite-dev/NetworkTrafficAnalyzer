@@ -219,6 +219,15 @@ class Pipeline:
         snap["geo"] = self.geo_message()
         return snap
 
+    def host_info(self, ip: str) -> dict[str, Any]:
+        """What the app has seen of one address: kind, name, traffic, first seen."""
+        with self.lock:
+            now = self.now()
+            h = self.hosts.hosts.get(ip)
+            if h is None:
+                return {"kind": self.hosts.kind_of(ip), "name": self.hosts.names.get(ip, "")}
+            return self.hosts.describe(h, now, self.hosts.total_in_window(now, 60))
+
     def inspect(self, pid: int) -> dict[str, Any] | None:
         with self.lock:
             rec = self.store.get(pid)

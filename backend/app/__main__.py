@@ -43,11 +43,14 @@ def parse_args(argv: list[str] | None = None) -> Settings:
                    help="start live capture right away")
     p.add_argument("--allow-remote", action="store_true", default=s.allow_remote,
                    help="allow binding to a non-loopback address (containers only)")
+    p.add_argument("--no-ip-lookup", action="store_true",
+                   help="never ask an online service who owns an address you click on")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     a = p.parse_args(argv)
     s.iface, s.replay, s.loop, s.replay_speed = a.iface, a.replay, a.loop, a.speed
     s.host, s.port, s.geo, s.geo_db = a.host, a.port, a.geo, a.geo_db
     s.promisc, s.allow_remote = a.promisc, a.allow_remote
+    s.ip_lookup = s.ip_lookup and not a.no_ip_lookup
     s.wifi_target = a.wifi_target
     s.open_browser, s.autostart = a.open_browser, a.autostart
     return s

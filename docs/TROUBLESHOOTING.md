@@ -74,6 +74,10 @@ PYTHON=/opt/homebrew/bin/python3.14 scripts/setup.sh
 
 That's expected. Docker Desktop runs containers inside a Linux virtual machine, so a container can't see your Mac's network interfaces. Use Docker for the demo and for analysing `.pcap` files. For live capture on a Mac, run the app directly. On a Linux machine, `docker compose --profile linux-capture up capture` does capture the host's interfaces.
 
+## The "what is this?" card says it couldn't find who owns an address
+
+The owner lookup needs internet access and asks `ipwho.is`. If you are offline, behind a network that blocks it, or started with `--no-ip-lookup`, the card still tells you what the app saw (names from your DNS and TLS traffic, and the router and home devices), it just can't name the owner.
+
 ## A "MISSED" counter appeared in the top bar
 
 The capture reads straight from the kernel's buffer, and the kernel keeps its own count of packets it had to discard because the app was too slow. If that count is above zero the top bar shows it, so you can tell the totals are slightly low. In testing the app catches about 99.5% of the traffic of a 40 MB download, so a few missed packets are normal on a very busy connection. Press Clear to reset the number. To check the app against macOS yourself, compare its total with `netstat -ib -I en0` (Ibytes plus Obytes) over the same stretch of time.

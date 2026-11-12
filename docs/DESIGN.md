@@ -88,5 +88,6 @@ One screen holds everything you need day to day:
 
 - **Row 1:** Network (Map, Flows, World, Wi-Fi tabs) beside Alerts. The World tab is the Geo-IP map.
 - **Row 2:** one Traffic panel: the bandwidth line, and underneath it a stacked bar and legend for protocol shares (the bar is DOM, not a chart, so it can carry plain-English tooltips).
-- **Bottom:** a Packet details drawer pinned to the window, showing only its title bar and packet count until opened. Picking a device, an alert, a quick filter or pressing `/` opens it, filtered. It overlays the page instead of pushing it, so the map doesn't jump.
+- **Bottom:** a Packet details drawer pinned to the window, showing only its title bar and packet count until opened. The "Show its packets" button on the address card, a quick filter or pressing `/` opens it. It is about a third of the window tall (drag its top edge to resize; the size is remembered), and when it opens the page scrolls just enough to keep the map in view above it.
+- **Clicking an address:** opens the "what is this?" card beside the pointer: a title, one plain sentence, a short list of facts, and the buttons "Show its packets" and "Copy address". Esc or clicking elsewhere closes it.
 - **Top bar:** Start, the Live | Demo switch, the interface, and a `⋯` menu for Clear, Save capture and Open file. Readouts, mute and the `?` guide sit on the right.

@@ -62,6 +62,7 @@ All of these need the session cookie. `POST` requests also need an exact `Origin
 | POST   | `/api/capture/start`      | `{"iface": "en0"}` or `{"iface": "replay"}`                    |
 | POST   | `/api/capture/stop`       | pause capture or replay                                        |
 | POST   | `/api/clear`              | empty the buffer, stats and alerts                             |
+| GET    | `/api/ip/{ip}`            | what an address is: local knowledge, reverse DNS and owner (plain-English summary and facts) |
 | GET    | `/api/packets/{id}`       | decoded layers with byte ranges, hex, secret ranges            |
 | POST   | `/api/alerts/{id}/reveal` | the masked value of a cleartext credential                     |
 | GET    | `/api/export.pcap`        | the session as a pcap (`?headers_only=1` keeps 128 bytes each) |
@@ -71,6 +72,10 @@ All of these need the session cookie. `POST` requests also need an exact `Origin
 ## Switching between Live, Demo and a file
 
 The dashboard's Live | Demo switch (and Open file) all go through the same few endpoints, and the server makes sure only one switch runs at a time, so two quick clicks or two tabs can't leave demo data labelled as live. The bundled `samples/demo.pcap` is always offered, but it only plays when asked (and loops). If Live can't start, for example without capture permission, the demo is put back instead of leaving an empty screen. While replayed or uploaded data is on screen a strip says so, and exports are named `nta-demo-…` or `nta-file-…`. See [SECURITY.md](../SECURITY.md) for why each of these exists.
+
+## "What is this address?"
+
+Clicking an address anywhere calls `GET /api/ip/<address>` (`backend/app/ipinfo.py`). It answers from what the app already knows (this Mac, the router, device names seen in mDNS, server names seen in DNS and TLS), then, for a public address only, asks the system's reverse DNS and `ipwho.is` for the owner, network number and place. A small table of big networks (Google, Apple, Cloudflare, Amazon…) adds a plain-English note about what the company does. Results are cached for an hour, nothing is looked up until you click, private addresses never leave your Mac, and `--no-ip-lookup` (or `NTA_IP_LOOKUP=0`) skips the online part.
 
 ## Limits
 
@@ -122,6 +127,7 @@ Plain ES modules, no framework and no build step for the JavaScript (only the Ta
 | `table.js`, `inspector.js`, `filter.js` | the virtualised packet table, the packet inspector, the filter language (unit-tested) |
 | `wifi.js`                       | the Wi-Fi tab                                                                          |
 | `glossary.js`, `help.js`, `tooltip.js` | all the plain-English text, the `?` guide, and the one tooltip component         |
+| `ipcard.js`                     | the "what is this?" card that opens when you click an address                          |
 | `format.js`, `audio.js`         | number and time formatting, DOM helpers; the synthesised sound cues                    |
 
 Everything from the wire reaches the page through `textContent`, never `innerHTML`.

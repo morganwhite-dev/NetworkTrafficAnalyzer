@@ -31,10 +31,11 @@ I wanted to see what my Mac is actually doing on the network in real time. Wires
 - **Protocol parsing** for TCP, UDP, ICMP, DNS, mDNS, DHCP, HTTP, TLS (with the server name from the handshake), QUIC and ARP, with timestamps, addresses, ports, lengths and flags
 - **Filter bar** with a small query language: `ip == 192.168.1.10`, `proto == TLS and len > 1000`, `port == 53 || port == 443` ([cheat sheet](docs/FILTERS.md))
 - **Packet inspector** with a one-line plain summary, decoded headers and a Hex/ASCII dump. Bytes are tinted by layer, and passwords are blurred until you click.
-- **World tab:** a Geo-IP map of where your servers are, working offline (no API key and no lookups leaving your Mac)
+- **World tab:** a Geo-IP map of where your servers are. It works offline: no API key, and no lookups leaving your Mac
+- **Click any address to learn what it is:** a card says in plain English who owns it, where it is and what it does ("a server run by Google, in Mountain View: search, YouTube, Gmail…"). Your router and home devices are named too. Only the address you click is looked up (reverse DNS plus ipwho.is), and `--no-ip-lookup` turns the online part off
 - **Upload a `.pcap` / `.pcapng`** to analyse it, and **export the session** as a `.pcap` for Wireshark
 - **One Traffic panel:** a bandwidth chart that goes red during a spike, with a protocol-share bar underneath (hover a colour for what the protocol means)
-- **Packet details drawer** at the bottom of the window: closed by default, it opens by itself, filtered, when you click a device or an alert
+- **Packet details drawer** at the bottom of the window: closed by default, drag its top edge to size it. It opens, filtered, from the card's "Show its packets" button, a quick filter or `/`
 - **Synthesized sound cues** (Web Audio, no audio files) when capture starts or a high-severity alert fires, with a mute toggle that remembers your choice
 - **Built to be safe to run:** root only for a split second, a per-launch access token, a strict CSP, and hostile-file handling ([details](SECURITY.md))
 
@@ -259,5 +260,7 @@ Geo-IP data by [DB-IP.com](https://db-ip.com) (CC BY 4.0). World outline from [N
 - [x] Phase 13: hardening from the same review: headers-only export really is headers only, source switches are serialised and recover from a failed Live start, inspector fields are masked before they are shortened, other local web pages can't borrow the session cookie (`Sec-Fetch-Site`), tokens must be 16+ characters, a DEMO DATA strip and `nta-demo-` export names, the Docker capture profile drops root, refreshed screenshots
 - [x] Phase 14: one-screen layout: Geo-IP became the World tab, Bandwidth and Protocols merged into one Traffic panel, Packets and Inspector moved into a Packet details drawer that opens by itself, the incident card moved into the alert rows, Clear/Save/Open moved under a ⋯ menu, and the world outline no longer draws lines across the map
 - [x] Phase 15: a live-capture demo video of the new layout, recorded by `scripts/record_demo.py`, which blurs other devices and refuses to finish if one slips through unblurred; the Mac's own IPv6 address now shows as "This Mac", and every dialog is centred
+- [x] Phase 16: the packet reader was losing about two thirds of the traffic under load (and reporting 0 dropped); a lean BPF reader with the largest kernel buffer now catches about 99.5% and a MISSED counter shows any loss
+- [x] Phase 17: click any address for a plain-English "what is this?" card (owner, place, what the company does), and a smaller, resizable packet drawer that keeps the map in view
 
 </details>

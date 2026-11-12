@@ -42,7 +42,11 @@ export class PacketTable {
     jump.addEventListener("click", () => this.toBottom());
     scroll.addEventListener("click", (ev) => {
       const row = ev.target.closest(".prow");
-      if (row) this.select(Number(row.dataset.id));
+      if (!row) return;
+      this.select(Number(row.dataset.id));
+      // Clicking an address (not the rest of the row) also asks what it is.
+      const cell = ev.target.closest(".src, .dst");
+      if (cell && cell.dataset.ip) this.onIp?.(cell.dataset.ip);
     });
     scroll.addEventListener("keydown", (ev) => this.onKey(ev));
     scroll.tabIndex = 0;
@@ -199,8 +203,8 @@ export class PacketTable {
       "div",
       { class: cls, role: "row", "data-id": r.id },
       el("span", { class: "t", text: rel }),
-      el("span", { class: "src", text: src, title: srcRaw }),
-      el("span", { class: "dst", text: dst, title: dstRaw }),
+      el("span", { class: "src", text: src, title: srcRaw, "data-ip": r.src }),
+      el("span", { class: "dst", text: dst, title: dstRaw, "data-ip": r.dst }),
       el("span", {
         class: `p-${r.proto}`,
         text: r.proto,

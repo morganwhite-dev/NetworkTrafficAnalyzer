@@ -1063,6 +1063,7 @@ export class NetView {
   }
 
   onHover(ev) {
+    if (this.holdHover) return; // the "what is this?" card is open: no hover card on top of it
     const k = this.keyFromEvent(ev);
     this.setHover(k);
   }
@@ -1196,7 +1197,7 @@ export class NetView {
         el("div", { class: "hc-reason", text: `${h.title}: ${h.reason}` }),
       );
     if (h.ip)
-      kids.push(el("div", { class: "hc-foot", text: `click → ip == ${h.ip}` }));
+      kids.push(el("div", { class: "hc-foot", text: "click: what is this?" }));
     this.hovercard.replaceChildren(...kids);
     const [x, y] = it.pos || [0, 0];
     const left = it.zone === "column" || x + 260 > this.W ? x - 256 : x + 28;

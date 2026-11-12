@@ -11,6 +11,7 @@ import { fillPanelTips, initHelp } from "./help.js";
 import { Inspector } from "./inspector.js";
 import { NetView } from "./netview.js";
 import { PacketTable } from "./table.js";
+import { IpCard } from "./ipcard.js";
 import { initTooltips } from "./tooltip.js";
 import { WifiView } from "./wifi.js";
 import { connect } from "./ws.js";
@@ -91,6 +92,21 @@ const net = new NetView({
   onSelect: (ip) => focusHost(ip),
 });
 
+// ------------------------------------------------------------------ "what is this?" card
+const ipCard = new IpCard({
+  onShowPackets: (ip) => {
+    applyFilter(`ip == ${ip}`);
+    ipCard.hide();
+  },
+  onClose: () => focusHost(null),
+  // While the card is open, the map's hover card would just sit on top of it.
+  onOpenChange: (open) => {
+    net.holdHover = open;
+    if (open) net.setHover(null);
+  },
+});
+table.onIp = (ip) => ipCard.show(ip);
+
 // ------------------------------------------------------------------ drawer
 // Packets and the inspector live in a drawer pinned to the bottom of the window. It opens by
 // itself whenever you pick something to look at (a device, an alert, a quick filter).
@@ -103,8 +119,66 @@ function setDrawer(open) {
   if (open) {
     table.schedule();
     requestAnimationFrame(() => table.follow && table.toBottom(true));
+    keepMapAbove();
   }
 }
+
+// The drawer slides up over the bottom of the window. Scroll the page just enough that the
+// whole map stays visible above it (never so far that the map slides under the top bar).
+function keepMapAbove() {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      const map = $("panel-network").getBoundingClientRect();
+      const top = $("panel-packets").getBoundingClientRect().top;
+      const bar = document.querySelector(".topbar").offsetHeight;
+      const over = map.bottom - (top - 8);
+      if (over > 0) {
+        const room = Math.max(0, map.top - bar - 8);
+        window.scrollBy({ top: Math.min(over, room), behavior: "smooth" });
+      }
+    }),
+  );
+}
+
+// Drag the top edge of the drawer to resize it. The size is remembered.
+const DRAWER_KEY = "nta-drawer-height";
+function setDrawerHeight(px) {
+  const max = Math.round(window.innerHeight * 0.7);
+  const h = Math.max(160, Math.min(max, Math.round(px)));
+  document.documentElement.style.setProperty("--drawer-body-h", `${h}px`);
+  return h;
+}
+try {
+  const saved = Number(localStorage.getItem(DRAWER_KEY));
+  if (saved) setDrawerHeight(saved);
+} catch {
+  /* private mode: the default size is fine */
+}
+$("drawer-grip").addEventListener("pointerdown", (ev) => {
+  const grip = ev.currentTarget;
+  grip.setPointerCapture(ev.pointerId);
+  const move = (e) => {
+    // distance from the pointer to the bottom of the window, minus the title bar and padding
+    setDrawerHeight(window.innerHeight - e.clientY - 40 - 16);
+  };
+  const done = () => {
+    grip.removeEventListener("pointermove", move);
+    grip.removeEventListener("pointerup", done);
+    const h = parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue("--drawer-body-h"),
+      10,
+    );
+    try {
+      if (h) localStorage.setItem(DRAWER_KEY, String(h));
+    } catch {
+      /* ignore */
+    }
+    keepMapAbove();
+  };
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", done);
+  ev.preventDefault();
+});
 $("drawer-toggle").addEventListener("click", () => setDrawer(drawerBody.hidden));
 table.onStat = (text) => {
   $("drawer-stat").textContent = text;
@@ -145,7 +219,7 @@ document.addEventListener("keydown", (ev) => {
 const filterInput = $("filter-input");
 let filterTimer = 0;
 
-function applyFilter(text) {
+function applyFilter(text, openDrawer = true) {
   state.filterText = text;
   filterInput.value = text;
   const err = $("filter-error");
@@ -156,7 +230,7 @@ function applyFilter(text) {
     table.setFilter(pred);
     renderChip(text.trim());
     $("drawer-filter").textContent = text.trim() ? `FILTER · ${text.trim()}` : "";
-    if (text.trim()) setDrawer(true);
+    if (text.trim() && openDrawer) setDrawer(true);
   } catch (e) {
     if (!(e instanceof FilterError)) throw e;
     err.textContent = e.message;
@@ -198,14 +272,18 @@ filterInput.addEventListener("keydown", (ev) => {
 
 function focusHost(ip) {
   if (!ip) {
+    ipCard.hide();
     if (/^ip == /.test(state.filterText)) applyFilter("");
     net.select(null);
     geomap.select(null);
     return;
   }
-  applyFilter(`ip == ${ip}`);
+  // Clicking an address tells you what it is. The packets are filtered and waiting in the
+  // drawer (the card's button opens it), so a click never covers the map by itself.
+  applyFilter(`ip == ${ip}`, false);
   net.select(ip);
   geomap.select(ip);
+  ipCard.show(ip);
 }
 
 // ------------------------------------------------------------------ status

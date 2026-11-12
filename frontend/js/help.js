@@ -16,7 +16,7 @@ const READING = [
   ],
   [
     "Click anything",
-    "Click a device, a server, a ribbon, a dot on the World tab or an alert, and the Packet details drawer at the bottom of the window opens, showing only its traffic. Press Esc to clear the filter.",
+    "Click a device, a server, a ribbon, a dot on the World tab, an alert or an address in the packet list, and a card tells you what it is: who owns it, where it is and what it does, in plain English. Its \u201cShow its packets\u201d button opens the Packet details drawer, filtered to that address. Press Esc to close the card.",
   ],
   [
     "Live and Demo",

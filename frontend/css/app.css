@@ -1899,6 +1899,10 @@ dialog.help-dialog[open] {
 main {
   padding-bottom: 60px; /* room for the drawer bar */
 }
+/* While the drawer is open, leave room for it, so the page can scroll the map back into view. */
+body:has(.drawer[data-open="true"]) main {
+  padding-bottom: calc(var(--drawer-body-h, clamp(220px, 32vh, 360px)) + 64px);
+}
 
 /* ---------- World tab ---------- */
 .worldview {
@@ -2073,7 +2077,7 @@ main {
 .drawer__body {
   display: flex;
   gap: 12px;
-  height: min(520px, 44vh);
+  height: var(--drawer-body-h, clamp(220px, 32vh, 360px));
   padding: 0 16px 16px;
   box-sizing: border-box;
 }
@@ -2088,4 +2092,121 @@ main {
 }
 .chip[hidden] {
   display: none;
+}
+
+/* drag handle on the top edge of the drawer */
+.drawer__grip {
+  display: none;
+  height: 8px;
+  cursor: ns-resize;
+  touch-action: none;
+  background: transparent;
+  border-bottom: 1px solid var(--line-soft);
+}
+.drawer__grip::after {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 3px;
+  margin: 2px auto 0;
+  border-radius: 2px;
+  background: var(--line);
+}
+.drawer__grip:hover::after {
+  background: var(--hi);
+}
+.drawer[data-open="true"] .drawer__grip {
+  display: block;
+}
+
+/* ---------- "what is this?" card ---------- */
+.ipcard {
+  position: fixed;
+  z-index: 60;
+  width: 380px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  padding: 12px 14px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--hi);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+}
+.ipcard[hidden] {
+  display: none;
+}
+.ipcard__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.ipcard__title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.ipcard__ip {
+  margin-top: 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.ipcard__x {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.ipcard__x:hover {
+  color: var(--hi);
+  border-color: var(--hi);
+}
+.ipcard__summary {
+  margin: 10px 0 0;
+  color: var(--text);
+  line-height: 1.55;
+}
+.ipcard__summary.is-loading {
+  color: var(--text-dim);
+}
+.ipcard__facts {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 5px 12px;
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.ipcard__facts dt {
+  color: var(--text-dim);
+}
+.ipcard__facts dd {
+  margin: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.ipcard__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.prow .src,
+.prow .dst {
+  cursor: pointer;
+}
+.prow .src:hover,
+.prow .dst:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--hi);
 }

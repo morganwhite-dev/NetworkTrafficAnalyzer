@@ -43,6 +43,7 @@ class Settings:
     allow_remote: bool = False
     public_port: int | None = None   # host port when Docker maps a different one
     promisc: bool = False
+    ip_lookup: bool = True            # ask ipwho.is who owns an address you click on
     wifi_target: str = "1.1.1.1"
     open_browser: bool = False      # open the dashboard when the server is ready
     autostart: bool = False         # start live capture on launch (the Mac app does this)
@@ -84,6 +85,7 @@ class Settings:
                 )
             s.token = env["NTA_TOKEN"]
         s.allow_remote = env.get("NTA_ALLOW_REMOTE", "0") == "1"
+        s.ip_lookup = env.get("NTA_IP_LOOKUP", "1") != "0"
         if env.get("NTA_PUBLIC_PORT"):
             s.public_port = int(env["NTA_PUBLIC_PORT"])
         return s
