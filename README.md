@@ -9,6 +9,8 @@
 
 ![The dashboard in demo mode: a bandwidth hog, a port-scanning smart TV and a password sent over plain HTTP, all flagged](docs/screenshots/dashboard.png)
 
+**[Watch the 90-second demo video](docs/demo/network-traffic-analyzer-demo.mp4)**: recorded on a real, live capture of my own Mac, not the staged demo data above.
+
 ## Why I built it
 
 I wanted to see what my Mac is actually doing on the network in real time. Wireshark can answer that, but it's a wall of packets, and I wanted something I could glance at. So I built a dashboard that captures my Mac's traffic live and draws my home network as a little 3D map: my Mac, the router, the other devices on my Wi-Fi, and every server on the internet I'm talking to. Normal traffic flows along the lines in green. When something's wrong (one server hogging the bandwidth, a device scanning my ports, a password going out without encryption), that node turns red and a card in the corner tells me what happened in plain words.
@@ -230,5 +232,6 @@ Geo-IP data by [DB-IP.com](https://db-ip.com) (CC BY 4.0). World outline from [N
 - [x] Phase 12: fixes from a security review of the switch: a paused demo can't leak a packet into the next source, and only an explicit `replay` ever selects the demo
 - [x] Phase 13: hardening from the same review: headers-only export really is headers only, source switches are serialised and recover from a failed Live start, inspector fields are masked before they are shortened, other local web pages can't borrow the session cookie (`Sec-Fetch-Site`), tokens must be 16+ characters, a DEMO DATA strip and `nta-demo-` export names, the Docker capture profile drops root, refreshed screenshots
 - [x] Phase 14: one-screen layout: Geo-IP became the World tab, Bandwidth and Protocols merged into one Traffic panel, Packets and Inspector moved into a Packet details drawer that opens by itself, the incident card moved into the alert rows, Clear/Save/Open moved under a ⋯ menu, and the world outline no longer draws lines across the map
+- [x] Phase 15: a live-capture demo video of the new layout, recorded by `scripts/record_demo.py`, which blurs other devices and refuses to finish if one slips through unblurred; the Mac's own IPv6 address now shows as "This Mac", and every dialog is centred
 
 </details>

@@ -25,3 +25,6 @@ exports/
 # macOS
 .DS_Store
 .claude/
+
+# raw screen recordings (the finished video in docs/demo/ is what gets committed)
+docs/demo/raw/
