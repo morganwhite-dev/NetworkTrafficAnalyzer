@@ -8,7 +8,8 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
-HEADERS_ONLY_SNAPLEN = 128
+from .parser import HEADERS_FALLBACK
+
 RECORD_OVERHEAD = 200  # rough per-record bookkeeping cost, so tiny packets still count
 
 
@@ -20,6 +21,16 @@ class Record:
     linktype: int
     row: dict[str, Any]
     secrets: list[tuple[int, int]] = field(default_factory=list)  # absolute byte ranges
+    header_len: int = HEADERS_FALLBACK  # where the payload starts (end of the last header)
+
+
+def _headers_only(rec: Record) -> bytes:
+    """The packet cut at the payload offset, with every detected secret range zeroed."""
+    data = bytearray(rec.raw[: rec.header_len])
+    for start, end in rec.secrets:
+        if start < len(data):
+            data[start:min(end, len(data))] = bytes(min(end, len(data)) - start)
+    return bytes(data)
 
 
 class PacketStore:
@@ -38,8 +49,10 @@ class PacketStore:
         return self._bytes
 
     def add(self, ts: float, raw: bytes, linktype: int, row: dict[str, Any],
-            secrets: list[tuple[int, int]] | None = None) -> Record:
-        rec = Record(self._next_id, ts, raw, linktype, row, secrets or [])
+            secrets: list[tuple[int, int]] | None = None,
+            header_len: int | None = None) -> Record:
+        hl = HEADERS_FALLBACK if header_len is None else header_len
+        rec = Record(self._next_id, ts, raw, linktype, row, secrets or [], max(0, hl))
         row["id"] = rec.id
         self._next_id += 1
         self._records[rec.id] = rec
@@ -72,18 +85,23 @@ class PacketStore:
     def export_pcap(self, headers_only: bool = False) -> bytes:
         """Classic libpcap file (microsecond timestamps).
 
+        ``headers_only`` keeps each packet up to the end of its last parsed header
+        (link, network, transport) and drops the payload. Detected secret ranges are zeroed
+        as well, so a secret can never survive even if a header range overlaps it. The full
+        export is byte-for-byte what was captured.
+
         A capture session uses one link type (the store is cleared when the
         interface changes); records with a different link type are skipped.
         """
         buf = io.BytesIO()
         records = list(self._records.values())
         linktype = records[0].linktype if records else 1
-        snaplen = HEADERS_ONLY_SNAPLEN if headers_only else 262144
+        snaplen = 262144
         buf.write(struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, snaplen, linktype))
         for rec in records:
             if rec.linktype != linktype:
                 continue
-            data = rec.raw[:HEADERS_ONLY_SNAPLEN] if headers_only else rec.raw
+            data = _headers_only(rec) if headers_only else rec.raw
             sec = int(rec.ts)
             usec = int(round((rec.ts - sec) * 1_000_000))
             if usec >= 1_000_000:

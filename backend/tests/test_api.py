@@ -92,6 +92,11 @@ def test_upload_analyse_inspect_export(authed):
 
     exported = rdpcap(io.BytesIO(authed.get("/api/export.pcap").content))
     assert len(exported) == 62
+    full_bytes = authed.get("/api/export.pcap").content
+    assert b"hunter2" in full_bytes  # the full export keeps everything, as the dialog warns
+    headers_only = authed.get("/api/export.pcap?headers_only=1").content
+    assert b"hunter2" not in headers_only and b"POST /login" not in headers_only
+    assert len(rdpcap(io.BytesIO(headers_only))) == 62
 
     with authed.websocket_connect(WS, headers={"origin": ORIGIN}) as ws:
         snap = ws.receive_json()

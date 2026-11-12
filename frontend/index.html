@@ -186,7 +186,8 @@
   <dialog id="export-dialog">
     <h2>Export this capture</h2>
     <p>The full file contains every byte captured, including anything sent in cleartext (like
-      passwords on plain HTTP). "Headers only" keeps the first 128 bytes of each packet.</p>
+      passwords on plain HTTP). "Headers only" keeps just the Ethernet, IP and TCP/UDP headers of each packet and drops
+      everything after them, so no passwords, cookies or page content are included.</p>
     <div class="actions">
       <button class="btn" value="cancel" id="export-cancel" type="button">Cancel</button>
       <button class="btn" id="export-headers" type="button">Headers only</button>

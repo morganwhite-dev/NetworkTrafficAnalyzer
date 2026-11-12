@@ -21,6 +21,8 @@ from scapy.layers.inet6 import (
     ICMPv6ND_RA,
     IPv6,
 )
+from scapy.layers.l2 import Dot1Q
+from scapy.packet import NoPayload
 
 from .redact import HTTP_METHODS, mask_text
 from .textsafe import clean
@@ -108,6 +110,35 @@ def dissect(raw: bytes, linktype: int) -> Packet:
         return cls(raw)
     except Exception:  # noqa: BLE001
         return Raw(raw)
+
+
+# Layers whose end marks the end of the "headers": link, network and transport.
+_HEADER_LAYERS = (Ether, Dot1Q, ARP, IP, IPv6, TCP, UDP, ICMP)
+HEADERS_FALLBACK = 54  # Ethernet + IPv4 + TCP, used only when nothing could be parsed
+
+
+def header_end(pkt: Packet, raw_len: int) -> int:
+    """Byte offset where the payload starts: the end of the last link/network/transport header.
+
+    Everything after it (application data, TLS records, DNS bodies, Ethernet padding) is
+    payload. Never raises; falls back to a fixed length when no header layer was parsed.
+    """
+    try:
+        end = 0
+        layer = pkt
+        for _ in range(16):
+            if isinstance(layer, NoPayload):
+                break
+            if isinstance(layer, _HEADER_LAYERS) or type(layer).__name__.startswith("ICMPv6"):
+                end = raw_len - len(bytes(layer.payload))
+            elif end:
+                break  # first application-level layer after the headers
+            layer = layer.payload
+        if end > 0:
+            return min(end, raw_len)
+    except Exception:  # noqa: BLE001 - hostile input must never crash the pipeline
+        pass
+    return min(HEADERS_FALLBACK, raw_len)
 
 
 def _flags_text(flags: int) -> str:

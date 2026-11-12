@@ -22,7 +22,15 @@ from .config import Settings
 from .detectors import AlertBook, Engine
 from .geoip import GeoResolver
 from .hosts import HostTracker
-from .parser import CLEARTEXT_LOGIN_PORTS, dissect, facts_from, layer_tree, link_type_of, row
+from .parser import (
+    CLEARTEXT_LOGIN_PORTS,
+    dissect,
+    facts_from,
+    header_end,
+    layer_tree,
+    link_type_of,
+    row,
+)
 from .redact import HTTP_METHODS, MASK, find_secrets, mask_text
 from .stats import Stats
 from .store import PacketStore
@@ -94,9 +102,12 @@ class Pipeline:
         if f.payload and f.l4 == "tcp" and (f.dport in CLEARTEXT_LOGIN_PORTS
                                             or f.payload.startswith(HTTP_METHODS)):
             secrets = find_secrets(f.payload, f.dport)
+        # Offsets must come from the bytes we hold, not the wire length: a snaplen-truncated
+        # capture is shorter than `length`, which would shift every secret range.
+        f.payload_offset = len(raw) - len(f.payload)
         r = row(0, f)
         ranges = [(f.payload_offset + s.start, f.payload_offset + s.end) for s in secrets]
-        rec = self.store.add(ts, raw, linktype, r, ranges)
+        rec = self.store.add(ts, raw, linktype, r, ranges, header_end(pkt, len(raw)))
         self.stats.add(ts, length, f.category)
         self.hosts.observe(f)
         self.engine.on_packet(f, rec.id, secrets)
