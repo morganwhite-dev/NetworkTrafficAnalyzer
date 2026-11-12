@@ -121,3 +121,70 @@ def test_start_without_capture_permission_is_a_clear_403(authed):
     r = authed.post("/api/capture/start", json={"iface": iface}, headers=POST_HEADERS)
     assert r.status_code == 403
     assert "sudo" in r.json()["detail"] or "CAP_NET_RAW" in r.json()["detail"]
+
+
+def test_bundled_demo_toggles_on_demand(runtime, settings, tmp_path):
+    """Live is the default; the Demo toggle starts the replay and Stop pauses it."""
+    from fastapi.testclient import TestClient
+
+    from app.config import DEMO_PCAP
+    from app.main import create_app
+    from app.pcapfile import normalize_in_child
+
+    norm = tmp_path / "replay.pcap"
+    normalize_in_child(DEMO_PCAP, norm, settings.max_file_packets, settings.max_record_bytes,
+                       settings.pcap_parse_timeout)
+    runtime.replay_file, runtime.replay_name = norm, DEMO_PCAP.name
+    runtime.replay_auto, runtime.replay_loop = False, True
+
+    with TestClient(create_app(runtime), base_url="http://127.0.0.1:8000") as c:
+        c.cookies.set("nta_session", TOKEN)
+        before = c.get("/api/status").json()
+        assert before["mode"] != "replay" and not before["capturing"]  # nothing auto-started
+        assert before["replay"] == "demo.pcap"                          # so the toggle is offered
+
+        on = c.post("/api/capture/start", json={"iface": "replay"}, headers=POST_HEADERS).json()
+        assert on["mode"] == "replay" and on["capturing"]
+        assert runtime.replayer.loop is True
+
+        off = c.post("/api/capture/stop", headers=POST_HEADERS).json()
+        assert off["mode"] == "replay" and not off["capturing"]
+
+
+def test_paused_replay_does_not_leak_a_packet_into_the_next_source(runtime, settings, tmp_path):
+    """Switching away from the demo must not leak its last sleeping packet into the new session."""
+    import time
+
+    from app.capture import Replayer
+    from app.config import DEMO_PCAP
+    from app.pcapfile import normalize_in_child
+
+    norm = tmp_path / "replay.pcap"
+    normalize_in_child(DEMO_PCAP, norm, settings.max_file_packets, settings.max_record_bytes,
+                       settings.pcap_parse_timeout)
+    rp = Replayer(runtime.pipeline, norm, loop=True)
+    rp.start()
+    time.sleep(0.4)          # the thread is now in the middle of the demo
+    rp.pause()
+    runtime.pipeline.clear()  # what a switch to Live or a file does
+    time.sleep(1.6)           # longer than the longest sleep between packets
+    try:
+        assert len(runtime.pipeline.store) == 0
+    finally:
+        rp.stop()
+
+
+def test_empty_iface_never_means_demo(authed, runtime, settings, tmp_path):
+    from app.config import DEMO_PCAP
+    from app.pcapfile import normalize_in_child
+
+    norm = tmp_path / "replay.pcap"
+    normalize_in_child(DEMO_PCAP, norm, settings.max_file_packets, settings.max_record_bytes,
+                       settings.pcap_parse_timeout)
+    runtime.replay_file, runtime.replay_name = norm, DEMO_PCAP.name
+    runtime.replay_auto = False
+    runtime.live.iface = None
+    for body in ({}, {"iface": ""}, {"iface": None}):
+        r = authed.post("/api/capture/start", json=body, headers=POST_HEADERS)
+        assert r.status_code == 400, body
+    assert runtime.pipeline.mode != "replay"

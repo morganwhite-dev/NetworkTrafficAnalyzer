@@ -7,9 +7,11 @@ import { Charts } from "./charts.js";
 import { compileFilter, FilterError } from "./filter.js";
 import { el, fmtCount, fmtRate, icon } from "./format.js";
 import { GeoMap } from "./geomap.js";
+import { fillPanelTips, initHelp } from "./help.js";
 import { Inspector } from "./inspector.js";
 import { NetView } from "./netview.js";
 import { PacketTable } from "./table.js";
+import { initTooltips } from "./tooltip.js";
 import { WifiView } from "./wifi.js";
 import { connect } from "./ws.js";
 
@@ -24,12 +26,24 @@ const state = {
 };
 
 // ------------------------------------------------------------------ toasts
-function toast(message, kind = "info", ms = 4000) {
+function toast(message, kind = "info", ms = 4000, action = null) {
   const t = el("div", {
-    class: `toast${kind === "err" ? " err" : ""}`,
+    class: `toast${kind === "err" ? " err" : ""}${action?.cls ? ` ${action.cls}` : ""}`,
     role: kind === "err" ? "alert" : "status",
     text: message,
   });
+  if (action) {
+    const b = el("button", {
+      class: "toast-act",
+      type: "button",
+      text: action.label,
+    });
+    b.addEventListener("click", () => {
+      action.run();
+      t.remove();
+    });
+    t.append(b);
+  }
   $("toasts").append(t);
   setTimeout(() => t.remove(), ms);
 }
@@ -39,6 +53,7 @@ const inspector = new Inspector({
   root: $("inspector"),
   body: $("insp-body"),
   toggle: $("btn-inspector"),
+  labelFor: (ip) => net.nameFor(ip),
 });
 const table = new PacketTable({
   scroll: $("ptable-scroll"),
@@ -47,6 +62,7 @@ const table = new PacketTable({
   jumpText: $("jump-live-text"),
   stat: $("table-stat"),
   onSelect: (id) => inspector.show(id),
+  labelFor: (ip) => net.nameFor(ip),
 });
 const charts = new Charts({
   bwCanvas: $("bw-chart"),
@@ -137,6 +153,16 @@ function focusHost(ip) {
   applyFilter(`ip == ${ip}`);
   net.select(ip);
   geomap.select(ip);
+  // The packet list is far below the map: say what just happened and offer a jump.
+  const panel = $("panel-packets");
+  if (panel.getBoundingClientRect().top > window.innerHeight * 0.7) {
+    for (const old of document.querySelectorAll(".focus-toast")) old.remove();
+    toast(`Showing packets for ${net.nameFor(ip)}.`, "info", 6000, {
+      label: "Jump to packets",
+      cls: "focus-toast",
+      run: () => panel.scrollIntoView({ behavior: "smooth", block: "start" }),
+    });
+  }
 }
 
 // ------------------------------------------------------------------ status
@@ -147,6 +173,10 @@ function applyStatus(s) {
   if (s.capturing && !was) state.capturingSince = Date.now();
   if (!s.capturing) state.capturingSince = null;
   renderModeChip();
+  renderModeToggle();
+  renderEmptyMap();
+  // The interface only matters for live capture; in Demo it is just noise.
+  $("iface-select").hidden = s.mode === "replay";
 
   const btn = $("btn-capture");
   btn.className = `btn ${s.capturing ? "btn-stop" : "btn-start"}`;
@@ -156,7 +186,7 @@ function applyStatus(s) {
   );
 
   const live = s.mode === "live" || s.mode === "idle";
-  $("banner").hidden = !(live && s.capture && !s.capture.ok) || s.replay;
+  $("banner").hidden = !(live && s.capture && !s.capture.ok) || s.mode === "replay";
   $("banner-text").textContent = s.capture?.hint || "";
 
   const geo = s.geo || {};
@@ -174,13 +204,19 @@ function renderModeChip() {
   const s = state.status;
   if (!s) return;
   const chip = $("mode-chip");
-  const label =
-    { live: "LIVE", replay: "REPLAY", file: "FILE", idle: "IDLE" }[s.mode] ||
-    s.mode.toUpperCase();
+  const demo = s.mode === "replay" && s.source === "demo.pcap";
+  const label = demo
+    ? "DEMO"
+    : { live: "LIVE", replay: "REPLAY", file: "FILE", idle: "IDLE" }[s.mode] ||
+      s.mode.toUpperCase();
   const parts = [];
   if (s.capturing)
     parts.push(el("span", { class: "rec", "aria-hidden": "true" }));
-  parts.push(el("span", { text: `${label}${s.source ? ` ${s.source}` : ""}` }));
+  parts.push(
+    el("span", {
+      text: `${label}${s.source && !demo ? ` ${s.source}` : ""}`,
+    }),
+  );
   if (s.capturing && state.capturingSince) {
     const secs = Math.floor((Date.now() - state.capturingSince) / 1000);
     const mm = String(Math.floor(secs / 60)).padStart(2, "0");
@@ -192,19 +228,67 @@ function renderModeChip() {
 }
 setInterval(renderModeChip, 1000);
 
+// Live / Demo switch. Shown whenever a replay (the bundled demo or --replay) is available.
+function renderModeToggle() {
+  const s = state.status;
+  if (!s) return;
+  $("mode-toggle").hidden = !s.replay;
+  const demo = s.mode === "replay";
+  const live = s.mode === "live" || s.mode === "idle";
+  $("mode-live").setAttribute("aria-pressed", String(live));
+  $("mode-demo").setAttribute("aria-pressed", String(demo));
+  $("mode-demo").title = `Replay ${s.replay || "the demo"}: made-up home traffic that triggers every kind of alert`;
+}
+
+// A bare grid tells a first-time user nothing: say what to do.
+function renderEmptyMap() {
+  const s = state.status;
+  const box = $("nv-empty");
+  if (!s) return;
+  const show = s.mode === "idle" && state.tab !== "wifi";
+  box.hidden = !show;
+  if (!show) return;
+  $("nv-empty-text").replaceChildren(
+    "Press ",
+    el("b", { text: "Start" }),
+    " to watch this Mac",
+    ...(s.replay ? [", or try ", el("b", { text: "Demo" })] : []),
+    ".",
+  );
+}
+
+async function switchSource(demo) {
+  const s = state.status;
+  if (!s) return;
+  const already = demo ? s.mode === "replay" : s.mode === "live";
+  if (already && s.capturing) return;
+  sound.unlock();
+  try {
+    const picked = $("iface-select").value;
+    const iface = demo
+      ? "replay"
+      : s.iface || (picked && picked !== "replay" ? picked : "");
+    if (!iface) {
+      toast("No network interface is available for live capture.", "err", 6000);
+      return;
+    }
+    applyStatus(await post("/api/capture/start", { iface }));
+    sound.start();
+    net.sweep();
+  } catch (e) {
+    toast(e.message, "err", 7000);
+    syncSelect();
+  }
+}
+$("mode-live").addEventListener("click", () => switchSource(false));
+$("mode-demo").addEventListener("click", () => switchSource(true));
+
 async function loadInterfaces() {
   state.ifacesLoaded = true;
   try {
     const data = await get("/api/interfaces");
     const sel = $("iface-select");
     const opts = [];
-    if (state.status?.replay)
-      opts.push(
-        el("option", {
-          value: "replay",
-          text: `Replay · ${state.status.replay}`,
-        }),
-      );
     const groups = {
       network: "Network",
       vpn: "VPN tunnels",
@@ -225,6 +309,17 @@ async function loadInterfaces() {
       }
       opts.push(og);
     }
+    // Last, so it is never the select's default when no interface resolves.
+    if (state.status?.replay)
+      opts.push(
+        el("option", {
+          value: "replay",
+          text:
+            state.status.replay === "demo.pcap"
+              ? "Demo"
+              : `Replay · ${state.status.replay}`,
+        }),
+      );
     sel.replaceChildren(...opts);
     syncSelect(data.default);
   } catch (e) {
@@ -386,6 +481,11 @@ $("iface-select").addEventListener("change", async () => {
 });
 
 $("btn-clear").addEventListener("click", async () => {
+  if (
+    state.status?.capturing &&
+    !window.confirm("Clear everything captured so far?")
+  )
+    return;
   try {
     await post("/api/clear");
     inspector.clear();
@@ -438,7 +538,7 @@ function renderMute() {
   const b = $("btn-mute");
   b.setAttribute("aria-pressed", sound.muted ? "true" : "false");
   b.setAttribute("aria-label", sound.muted ? "Unmute sounds" : "Mute sounds");
-  b.title = sound.muted ? "Sounds off" : "Sounds on";
+  b.setAttribute("data-tip", sound.muted ? "Alert sounds are off" : "Alert sounds are on");
   b.replaceChildren(icon(sound.muted ? "volume-off" : "volume"));
 }
 $("btn-mute").addEventListener("click", () => {
@@ -460,6 +560,7 @@ function setTab(tab) {
   $("netview").hidden = isWifi;
   $("wifiview").hidden = !isWifi;
   net.setTab(tab);
+  renderEmptyMap();
   if (isWifi) {
     socket.send("wifi:on"); // tells the server to start pinging
     wifi.resize();
@@ -480,3 +581,50 @@ document.addEventListener("keydown", (ev) => {
     filterInput.focus();
   }
 });
+
+// ------------------------------------------------------------------ guide
+initTooltips();
+fillPanelTips();
+initHelp({
+  dialog: $("help-dialog"),
+  body: $("help-body"),
+  openers: [$("btn-help"), $("firstrun-guide")],
+  closer: $("help-close"),
+});
+
+const FIRSTRUN_KEY = "nta-firstrun-dismissed";
+function firstRunDismissed() {
+  try {
+    return localStorage.getItem(FIRSTRUN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+$("firstrun").hidden = firstRunDismissed();
+$("firstrun-dismiss").addEventListener("click", () => {
+  $("firstrun").hidden = true;
+  try {
+    localStorage.setItem(FIRSTRUN_KEY, "1");
+  } catch {
+    /* private mode: it just comes back next visit */
+  }
+});
+
+// Quick filters next to the packet filter.
+for (const chip of document.querySelectorAll(".fchip")) {
+  chip.addEventListener("click", () => {
+    const q = chip.dataset.quick;
+    if (q === "problems") {
+      const ips = [...table.flagged];
+      if (!ips.length) {
+        toast("Nothing is flagged right now.", "info", 3000);
+        return;
+      }
+      applyFilter(ips.map((ip) => `ip == ${ip}`).join(" or "));
+    } else {
+      applyFilter(q);
+    }
+    net.select(null);
+    geomap.select(null);
+  });
+}

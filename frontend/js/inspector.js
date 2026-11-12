@@ -2,9 +2,11 @@
 
 import { get } from "./api.js";
 import { el, icon } from "./format.js";
+import { plainSummary } from "./glossary.js";
 
 export class Inspector {
-  constructor({ root, body, toggle }) {
+  constructor({ root, body, toggle, labelFor }) {
+    this.labelFor = labelFor || ((ip) => ip);
     this.root = root;
     this.body = body;
     this.toggleBtn = toggle;
@@ -32,7 +34,7 @@ export class Inspector {
     this.body.replaceChildren(
       el("div", {
         class: "empty",
-        text: "Click a packet to see its decoded headers and a hex dump.",
+        text: "Click a packet to see it explained in plain words, with its decoded headers and raw bytes below.",
       }),
     );
   }
@@ -77,6 +79,10 @@ export class Inspector {
       "div",
       { class: "insp-summary" },
       el("div", { class: `proto p-${r.proto}`, text: `#${d.id} · ${r.proto}` }),
+      el("div", {
+        class: "meta plain",
+        text: plainSummary(r, this.labelFor),
+      }),
       el("div", {
         class: "meta",
         text: `${r.src}${r.sport != null ? `:${r.sport}` : ""} → ${r.dst}${r.dport != null ? `:${r.dport}` : ""}`,

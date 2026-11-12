@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import {
   edgeStyle, GATEWAY_SLOT, iso, LAN_SLOTS, RankHold, ribbons, screenAt, SELF_SLOT,
-  slabGeometry, slabPoint, worldAt, columnRows,
+  slabGeometry, slabPoint, worldAt, columnRows, fitMiddle, slabLabelChars,
 } from "../js/netlayout.js";
 
 test("iso projection is 2:1", () => {
@@ -72,4 +72,23 @@ test("column rows stay inside the panel", () => {
   const rows = columnRows(9, 424, 260);
   assert.equal(rows.length, 9);
   assert.ok(rows[0] >= 64 && rows.at(-1) <= 424 - 28);
+});
+
+test("slab labels fit the gap between neighbours in a row", () => {
+  for (const S of [150, 240, 336, 384, 480]) {
+    const { name, sub } = slabLabelChars(S);
+    const gap = 0.46 * S; // LAN_SLOTS neighbours sit 0.23 of the slab width apart
+    assert.ok(sub * 6.6 <= Math.max(gap, 60 + 12), `sub fits at S=${S}`);
+    assert.ok(name >= 8 && sub >= 8 && name <= 18 && sub <= 30);
+  }
+  assert.ok(slabLabelChars(480).sub >= slabLabelChars(240).sub);
+});
+
+test("fitMiddle keeps both ends of an address", () => {
+  assert.equal(fitMiddle("192.168.1.23", 20), "192.168.1.23");
+  const out = fitMiddle("fe80::1d:9a08:8ab9:2f80", 14);
+  assert.equal(out.length, 14);
+  assert.ok(out.startsWith("fe80::") && out.endsWith("2f80") && out.includes("…"));
+  assert.equal(fitMiddle("abcdef", 2), "ab");
+  assert.equal(fitMiddle(null, 5), "");
 });

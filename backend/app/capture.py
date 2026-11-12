@@ -114,18 +114,23 @@ class Replayer:
         self._quit = True
         self.running.set()
 
+    def _gate(self) -> float | None:
+        """Block while paused. Returns the seconds spent paused, or None once stopped."""
+        t0 = time.time()
+        if not self.running.is_set():
+            self.running.wait()
+        return None if self._quit else time.time() - t0
+
     def _run(self) -> None:
         while not self._quit:
             prev_ts = None
             base_wall = time.time()
             base_ts = None
             for ts, raw, wirelen, linktype in iter_normalized(self.path):
-                if self._quit:
+                waited = self._gate()
+                if waited is None:
                     return
-                if not self.running.is_set():
-                    paused_at = time.time()
-                    self.running.wait()
-                    base_wall += time.time() - paused_at
+                base_wall += waited
                 if base_ts is None:
                     base_ts = ts
                 if prev_ts is not None and ts - prev_ts > 1.0:
@@ -135,6 +140,12 @@ class Replayer:
                 delay = due - time.time()
                 if delay > 0:
                     time.sleep(min(delay, 1.0))
+                    # pause() or stop() may have landed while we slept. Check again, so a packet
+                    # from the old source never leaks into whatever the app switched to.
+                    waited = self._gate()
+                    if waited is None:
+                        return
+                    base_wall += waited
                 self.pipeline.submit(raw, time.time(), linktype, wirelen)
             if not self.loop:
                 return

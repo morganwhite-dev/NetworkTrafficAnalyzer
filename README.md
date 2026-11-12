@@ -17,7 +17,8 @@ I wanted to see what my Mac is actually doing on the network in real time. Wires
 
 ## Features
 
-- **Live packet capture** on any macOS interface (Wi-Fi `en0` by default), plus a **demo replay** that needs no root at all
+- **Live packet capture** on any macOS interface (Wi-Fi `en0` by default), plus a **demo replay** that needs no root at all, with a **Live | Demo switch** in the top bar so you can flip between your real traffic and the demo without restarting
+- **Built to be understood:** a `?` guide explaining every panel, colour and protocol; hover help on the numbers, tabs and table headings; "what it means / what to do" on every alert; and a first-run hint
 - **Isometric network map:** this Mac, the router, home devices and internet hosts, with packets flowing along each link at a speed that matches the real throughput
 - **Flows view:** ribbons sized by each host's share of your bandwidth, so a hog is obvious at a glance
 - **Wi-Fi check:** signal strength plus how fast your router and the internet answer, turned into one plain answer: weak signal, busy Wi-Fi, Wi-Fi hiccups, or a slow internet connection (works without capture permission)
@@ -61,6 +62,8 @@ That creates a `.venv`, installs hash-checked dependencies (plus Apple's CoreWLA
 ```bash
 scripts/run.sh --replay samples/demo.pcap --loop
 ```
+
+You don't have to launch it that way. Any normal launch has a **Demo** button in the top bar that switches to the same demo (and **Live** switches back).
 
 Open the link it prints (it looks like `http://localhost:8000/?t=…`). The demo is 90 seconds of made-up home traffic on a loop. Around 20 seconds in, a login form goes out over plain HTTP. At 35 seconds the "smart TV" port-scans the Mac, and at 50 seconds one server starts hogging the bandwidth.
 
@@ -220,5 +223,8 @@ Geo-IP data by [DB-IP.com](https://db-ip.com) (CC BY 4.0). World outline from [N
 - [x] Phase 7: isometric network view (Map and Flows)
 - [x] Phase 8: Docker and CI
 - [x] Phase 9: docs, screenshots and README
+- [x] Phase 10: map labels sized to their neighbours (long IPv6 addresses no longer collide), Live | Demo switch
+- [x] Phase 11: clarity pass from a design review: in-app guide, one tooltip system, plain-English alert explainers, friendly names in the packet table, quick filters, readable dim text, compact incident card, collision-aware map callouts
+- [x] Phase 12: fixes from a security review of the switch: a paused demo can't leak a packet into the next source, and only an explicit `replay` ever selects the demo
 
 </details>

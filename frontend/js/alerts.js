@@ -2,6 +2,7 @@
 
 import { post } from "./api.js";
 import { clock, el, icon } from "./format.js";
+import { alertInfo, SEVERITY_TIPS } from "./glossary.js";
 
 const RED = new Set(["high", "critical"]);
 
@@ -11,6 +12,7 @@ export class AlertsFeed {
     this.stat = stat;
     this.onFocus = onFocus;
     this.items = [];
+    this.open = new Set(); // alert ids whose explanation is expanded: survives in-place updates
     this.render();
   }
 
@@ -38,23 +40,40 @@ export class AlertsFeed {
   }
 
   updateStat() {
-    const red = this.items.filter((a) => RED.has(a.severity)).length;
+    const count = (sev) => this.items.filter((a) => a.severity === sev).length;
     this.stat.replaceChildren();
-    if (red)
-      this.stat.append(
-        el("span", { class: "t-alert", text: `${red} HIGH` }),
-        el("span", { class: "dot", text: "·" }),
-      );
+    for (const [sev, label] of [
+      ["critical", "CRITICAL"],
+      ["high", "HIGH"],
+    ]) {
+      const n = count(sev);
+      if (n)
+        this.stat.append(
+          el("span", { class: "t-alert", text: `${n} ${label}` }),
+          el("span", { class: "dot", text: "·" }),
+        );
+    }
     this.stat.append(el("span", { text: `${this.items.length} TOTAL` }));
   }
 
   render() {
     if (!this.items.length) {
       this.root.replaceChildren(
-        el("div", {
-          class: "empty",
-          text: "No alerts yet. Port scans, cleartext passwords, bandwidth hogs and spoofing show up here.",
-        }),
+        el(
+          "div",
+          { class: "allclear empty" },
+          el("span", { class: "ok", text: "ALL CLEAR" }),
+          el("span", { text: "Nothing suspicious so far. Watching for:" }),
+          el(
+            "ul",
+            {},
+            el("li", { text: "devices scanning your network for open doors" }),
+            el("li", { text: "passwords or logins sent without encryption" }),
+            el("li", { text: "one server hogging your bandwidth" }),
+            el("li", { text: "devices pretending to be your router" }),
+            el("li", { text: "data hidden inside name lookups, and VPN leaks" }),
+          ),
+        ),
       );
     } else {
       this.root.replaceChildren(...this.items.map((a) => this.row(a)));
@@ -77,12 +96,43 @@ export class AlertsFeed {
         el("span", {
           class: `sev sev-${a.severity}`,
           text: a.severity.toUpperCase(),
+          "data-tip": SEVERITY_TIPS[a.severity] || "",
         }),
         el("span", { class: "what", text: a.title }),
         el("span", { class: "time", text: clock(a.ts) }),
       ),
       el("div", { class: "why", text: a.reason, title: a.reason }),
     );
+    const info = alertInfo(a.kind);
+    if (info) {
+      const explain = el(
+        "div",
+        { class: "explain", hidden: !this.open.has(a.id) },
+        el("b", { text: "What it means" }),
+        el("span", { text: info.means }),
+        el("b", { text: "What to do" }),
+        el("span", { text: info.todo }),
+      );
+      const btn = el("button", {
+        class: "info-btn",
+        type: "button",
+        "aria-expanded": String(this.open.has(a.id)),
+        "aria-label": `What does ${a.title} mean?`,
+        "data-tip": "What does this mean?",
+        text: "?",
+      });
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const open = explain.hidden;
+        explain.hidden = !open;
+        if (open) this.open.add(a.id);
+        else this.open.delete(a.id);
+        btn.setAttribute("aria-expanded", String(open));
+      });
+      btn.addEventListener("keydown", (ev) => ev.stopPropagation());
+      body.querySelector(".top").insertBefore(btn, body.querySelector(".time"));
+      body.append(explain);
+    }
     if (a.has_secret) {
       const btn = el(
         "button",

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .config import LOOPBACK_HOSTS, Settings, default_data_dir
+from .config import DEMO_PCAP, LOOPBACK_HOSTS, Settings, default_data_dir
 
 GREEN, CYAN, RED, DIM, RESET = "\033[32m", "\033[36m", "\033[31m", "\033[2m", "\033[0m"
 
@@ -144,6 +144,17 @@ def main(argv: list[str] | None = None) -> int:
         rt.replay_file, rt.replay_name = norm, s.replay.name
         print(f"{DIM}Replaying {s.replay.name}: {info['packets']} packets"
               f"{' (looping)' if s.loop else ''}.{RESET}")
+    elif DEMO_PCAP.is_file():
+        # No --replay: still offer the bundled demo behind the dashboard's Live/Demo toggle.
+        # It stays idle until the toggle is used, and loops so it never just stops.
+        norm = rt.workdir / "replay.pcap"
+        try:
+            normalize_in_child(DEMO_PCAP, norm, s.max_file_packets, s.max_record_bytes,
+                               s.pcap_parse_timeout)
+            rt.replay_file, rt.replay_name = norm, DEMO_PCAP.name
+            rt.replay_auto, rt.replay_loop = False, True
+        except PcapError:
+            pass  # no toggle, live capture is unaffected
 
     app = create_app(rt)
     shown_host = "localhost" if s.host in ("127.0.0.1", "::1", "0.0.0.0") else s.host  # noqa: S104

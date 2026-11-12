@@ -10,6 +10,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = REPO_ROOT / "frontend"
+DEMO_PCAP = REPO_ROOT / "samples" / "demo.pcap"   # bundled demo, offered by the Live/Demo toggle
 DEFAULT_GEO_DB = REPO_ROOT / "data" / "dbip-city-lite.mmdb"
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}

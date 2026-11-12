@@ -13,17 +13,17 @@ export function iso(x, y, z = 0) {
 /** Slab size and screen offset for a panel of W×H pixels. */
 export function slabGeometry(W, H) {
   const raw = Math.max(150, Math.min(0.29 * W, H - 150));
-  const S = Math.floor(raw / 24) * 24;       // whole grid cells, so the slab sits on the floor grid
-  const ox = S + 24;                         // screen x of the world origin (slab's top corner)
-  const oy = Math.max(120, H - S - 40);      // screen y of the slab's top surface; room for the incident card
-  const wy = oy + SLAB_Z;                    // screen y of the world origin on the floor (z = 0)
+  const S = Math.floor(raw / 24) * 24; // whole grid cells, so the slab sits on the floor grid
+  const ox = S + 24; // screen x of the world origin (slab's top corner)
+  const oy = Math.max(120, H - S - 40); // screen y of the slab's top surface; room for the incident card
+  const wy = oy + SLAB_Z; // screen y of the world origin on the floor (z = 0)
   return { S, ox, oy, wy, rightEdge: 24 + 2 * S };
 }
 
 /** Screen point → world point on the plane z (inverse of iso + offset). */
 export function worldAt(sx, sy, geom, z = SLAB_Z) {
-  const a = sx - geom.ox;                    // x - y
-  const b = 2 * (sy - geom.wy + z);          // x + y
+  const a = sx - geom.ox; // x - y
+  const b = 2 * (sy - geom.wy + z); // x + y
   return { x: (a + b) / 2, y: (b - a) / 2, z };
 }
 
@@ -73,6 +73,31 @@ export function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
 }
 
+/**
+ * How many characters a label under a device on the slab may use. Neighbours in
+ * a row are 0.46·S apart on screen (see LAN_SLOTS), so the budget follows the
+ * slab size: IPv6 addresses and long host names stop short of the next label.
+ * Character widths are for the 12px name and 10px sub-line monospace, rounded up.
+ */
+export function slabLabelChars(S) {
+  const px = Math.max(60, Math.floor(0.46 * S) - 12);
+  return {
+    name: clamp(Math.floor(px / 7.8), 8, 18),
+    sub: clamp(Math.floor(px / 6.6), 8, 30),
+  };
+}
+
+/** Shortens from the middle so both ends of an address stay readable: fe80::1d:…:2f80. */
+export function fitMiddle(s, n) {
+  const str = String(s ?? "");
+  if (str.length <= n) return str;
+  if (n < 3) return str.slice(0, n);
+  const keep = n - 1;
+  const head = Math.ceil(keep / 2);
+  const tail = keep - head;
+  return `${str.slice(0, head)}…${tail ? str.slice(-tail) : ""}`;
+}
+
 /** L-shaped path along the grid from world point a to world point b. */
 export function gridPath(a, b, geom) {
   const c1 = { x: b.x, y: a.y, z: a.z };
@@ -105,7 +130,8 @@ export class RankHold {
   }
 
   update(next, now) {
-    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    const same = (a, b) =>
+      a.length === b.length && a.every((v, i) => v === b[i]);
     // Membership follows `next` at once: leavers drop out, newcomers join at the end.
     const wanted = new Set(next);
     const cur = this.current.filter((ip) => wanted.has(ip));
@@ -166,8 +192,8 @@ export function ribbons(rows, W, H, opts = {}) {
       : 1;
   let a = top;
   const items = rows.map((r, i) => {
-    const t = thick[i] * scale;                    // thickness at the Mac (left)
-    const tr = Math.min(t, Math.max(2, rowH - 8));   // tapers to fit its row (right)
+    const t = thick[i] * scale; // thickness at the Mac (left)
+    const tr = Math.min(t, Math.max(2, rowH - 8)); // tapers to fit its row (right)
     const rowCenter = top + rowH * i + rowH / 2;
     const b1 = rowCenter - tr / 2;
     const a1 = a;

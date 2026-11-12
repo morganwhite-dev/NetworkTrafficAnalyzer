@@ -1,6 +1,7 @@
 // Bandwidth line chart and protocol donut (Chart.js, vendored).
 
 import { el, fmtCount, fmtRate } from "./format.js";
+import { protoTip } from "./glossary.js";
 
 export const PROTO_COLORS = {
   TLS: "#00ff41",
@@ -10,7 +11,7 @@ export const PROTO_COLORS = {
   DNS: "#0096a0",
   HTTP: "#ffb000",
   ICMP: "#8a93a3",
-  ARP: "#4f5868",
+  ARP: "#6b7587",
   Other: "#283040",
 };
 const ORDER = [
@@ -28,7 +29,7 @@ const ORDER = [
 function setupDefaults() {
   const C = window.Chart;
   Object.assign(C.defaults, {
-    color: "#4f5868",
+    color: "#7b8494",
     borderColor: "rgba(255,255,255,.04)",
     animation: false,
   });
@@ -179,13 +180,20 @@ export class Charts {
   redraw() {
     const ds = this.bw.data;
     ds.labels = this.times.map((_, i) => i);
-    ds.datasets[0].data = this.values;
+    // Time before the first byte was seen isn't "zero traffic", it's no data: leave a gap.
+    const first = this.values.findIndex((v) => v > 0);
+    ds.datasets[0].data = this.values.map((v, i) =>
+      first === -1 || i < first ? null : v,
+    );
     this.bw.update("none");
     const peak = Math.max(0, ...this.values);
     const now = this.values[this.values.length - 1] || 0;
-    this.bwStat.textContent = this.fileMode
-      ? `PEAK ${fmtRate(peak)}`
-      : `NOW ${fmtRate(now)} · PEAK ${fmtRate(peak)}`;
+    this.bwStat.textContent =
+      first === -1
+        ? "COLLECTING…"
+        : this.fileMode
+          ? `PEAK ${fmtRate(peak)}`
+          : `NOW ${fmtRate(now)} · PEAK ${fmtRate(peak)}`;
   }
 
   setProtocols(counts) {
@@ -205,11 +213,14 @@ export class Charts {
       .map(([k, v]) => {
         const name = el("td", { text: k });
         name.style.color = PROTO_COLORS[k];
+        const pct = total ? (v / total) * 100 : 0;
         return el(
           "tr",
-          {},
+          { class: pct < 1 ? "is-faint" : "", "data-tip": protoTip(k) },
           name,
-          el("td", { text: `${total ? Math.round((v / total) * 100) : 0}%` }),
+          el("td", {
+            text: pct >= 1 ? `${Math.round(pct)}%` : pct > 0 ? "<1%" : "0%",
+          }),
         );
       });
     this.protoTable.replaceChildren(...rows);

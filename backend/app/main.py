@@ -43,6 +43,8 @@ class Runtime:
     privilege: str = "user"            # user | sudo-dropped | root
     replay_file: Path | None = None    # normalised copy of --replay
     replay_name: str = ""
+    replay_auto: bool = True           # start the replay at launch (False: only on demand)
+    replay_loop: bool | None = None    # None: follow --loop
     replayer: Replayer | None = None
     wifi: WifiMonitor | None = None
     launch_url: str | None = None
@@ -90,7 +92,7 @@ def create_app(rt: Runtime) -> FastAPI:
         tasks = [asyncio.create_task(rt.hub.run()), asyncio.create_task(rt.geo.run())]
         if rt.wifi:
             rt.wifi.start()
-        if rt.replay_file:
+        if rt.replay_file and rt.replay_auto:
             start_replay(rt)
         elif rt.settings.autostart:
             await autostart_capture(rt)
@@ -138,7 +140,7 @@ def create_app(rt: Runtime) -> FastAPI:
     async def capture_start(request: Request) -> dict[str, Any]:
         body = await _json(request)
         iface = body.get("iface")
-        if iface in (None, "", "replay") and rt.replay_file:
+        if iface == "replay" and rt.replay_file:   # only this literal selects the demo
             if rt.pipeline.mode != "replay":
                 rt.live.stop()
                 rt.pipeline.clear()
@@ -310,7 +312,8 @@ def start_replay(rt: Runtime) -> None:
     with rt.pipeline.lock:
         rt.pipeline.hosts.configure(set(), [], None)
         rt.pipeline.engine.vpn = {"active": False}
-    rt.replayer = Replayer(rt.pipeline, rt.replay_file, rt.settings.loop, rt.settings.replay_speed)
+    loop = rt.settings.loop if rt.replay_loop is None else rt.replay_loop
+    rt.replayer = Replayer(rt.pipeline, rt.replay_file, loop, rt.settings.replay_speed)
     rt.replayer.start()
 
 

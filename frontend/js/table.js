@@ -1,13 +1,15 @@
 // Virtualized packet table: fixed 24px rows, only the visible window is in the DOM.
 
 import { el } from "./format.js";
+import { protoTip } from "./glossary.js";
 
 const ROW = 24;
 const OVERSCAN = 12;
 const MAX_ROWS = 10000;
 
 export class PacketTable {
-  constructor({ scroll, spacer, jump, jumpText, stat, onSelect }) {
+  constructor({ scroll, spacer, jump, jumpText, stat, onSelect, labelFor }) {
+    this.labelFor = labelFor || ((ip) => ip);
     this.scroll = scroll;
     this.spacer = spacer;
     this.jump = jump;
@@ -182,15 +184,27 @@ export class PacketTable {
       .filter(Boolean)
       .join(" ");
     const rel = this.baseTs !== null ? (r.t - this.baseTs).toFixed(3) : "";
-    const src = r.sport != null ? `${r.src}:${r.sport}` : r.src;
-    const dst = r.dport != null ? `${r.dst}:${r.dport}` : r.dst;
+    // Show the names the map uses; the raw address stays in the hover text.
+    const raw = (ip, port) => (port != null ? `${ip}:${port}` : ip);
+    const show = (ip, port) => {
+      const name = this.labelFor(ip);
+      return port != null ? `${name}:${port}` : name;
+    };
+    const src = show(r.src, r.sport);
+    const dst = show(r.dst, r.dport);
+    const srcRaw = raw(r.src, r.sport);
+    const dstRaw = raw(r.dst, r.dport);
     const node = el(
       "div",
       { class: cls, role: "row", "data-id": r.id },
       el("span", { class: "t", text: rel }),
-      el("span", { class: "src", text: src, title: src }),
-      el("span", { class: "dst", text: dst, title: dst }),
-      el("span", { class: `p-${r.proto}`, text: r.proto }),
+      el("span", { class: "src", text: src, title: srcRaw }),
+      el("span", { class: "dst", text: dst, title: dstRaw }),
+      el("span", {
+        class: `p-${r.proto}`,
+        text: r.proto,
+        "data-tip": protoTip(r.proto),
+      }),
       el("span", { class: "r num", text: r.len }),
       el("span", { class: "info", text: r.info, title: r.info }),
     );

@@ -12,12 +12,14 @@ import {
   svg,
   truncate,
 } from "./format.js";
+import { alertInfo } from "./glossary.js";
 import { device, footprintDiamond, slab } from "./iso.js";
 import {
   airPath,
   columnRows,
   edgeStyle,
   f,
+  fitMiddle,
   GATEWAY_SLOT,
   gridPath,
   LAN_SLOTS,
@@ -27,6 +29,7 @@ import {
   SELF_SLOT,
   SLAB_Z,
   slabGeometry,
+  slabLabelChars,
   slabPoint,
   TOP_INTERNET,
 } from "./netlayout.js";
@@ -55,6 +58,7 @@ export class NetView {
     this.incidentIdx = 0;
     this.knownIncidents = new Set();
     this.calloutSeen = new Set();
+    this.incSeen = new Map();
     this.nodes = new Map();
     this.edges = new Map();
     this.flowItems = new Map();
@@ -109,7 +113,14 @@ export class NetView {
       "filter",
       // userSpaceOnUse: a horizontal line has a zero-height bounding box, which
       // would otherwise clip the glowing Mac-to-router trunk to nothing.
-      { id: "nv-glow", filterUnits: "userSpaceOnUse", x: -4000, y: -4000, width: 12000, height: 12000 },
+      {
+        id: "nv-glow",
+        filterUnits: "userSpaceOnUse",
+        x: -4000,
+        y: -4000,
+        width: 12000,
+        height: 12000,
+      },
       svg("feGaussianBlur", { stdDeviation: "2.5", result: "b" }),
       svg(
         "feMerge",
@@ -251,12 +262,13 @@ export class NetView {
       transform: `translate(${g.ox} ${g.wy})`,
     });
     slab(slabG, g.S, SLAB_Z);
-    // Zone label printed on the slab's front-left face (skewed along the +x axis).
-    // Zone label on the floor, just in front of the slab's front-left face.
+    // Zone label on the floor in front of the slab's front-left face (skewed along
+    // the +x axis). It sits below the front row's two-line labels (they reach about
+    // 40px under a device), so the two never share a spot.
     const [lx, ly] = screenAt({ x: g.S * 0.3, y: g.S + 10, z: 0 }, g);
     this.slabLabel = svg("text", {
       class: "slab-label",
-      transform: `matrix(1 .5 0 1 ${f(lx)} ${f(ly + 10)})`,
+      transform: `matrix(1 .5 0 1 ${f(lx)} ${f(ly + 46)})`,
     });
     this.colX = Math.min(Math.max(g.rightEdge + 96, 0), this.W - 236);
     this.colHead = svg("text", { class: "col-head", x: this.colX - 12, y: 28 });
@@ -452,7 +464,8 @@ export class NetView {
     const { items, selfW, gwW } = this.layoutMap();
     const inetCount = v.counts?.internet ?? 0;
     this.colHead.textContent = `INTERNET · ${inetCount} HOST${inetCount === 1 ? "" : "S"}`;
-    this.slabLabel.textContent = `HOME NETWORK${v.network ? ` · ${v.network}` : ""}`;
+    // A small slab has no room for the subnet along its edge.
+    this.slabLabel.textContent = `HOME NETWORK${v.network && g.S >= 300 ? ` · ${v.network}` : ""}`;
 
     // ---- edges
     const wanted = new Set();
@@ -469,9 +482,10 @@ export class NetView {
     if (v.self) {
       const [ax, ay] = screenAt(selfW, g);
       const [bx, by] = screenAt(gwW, g);
-      const d = totalIn >= totalOut
-        ? `M${f(bx)} ${f(by)}L${f(ax)} ${f(ay)}`
-        : `M${f(ax)} ${f(ay)}L${f(bx)} ${f(by)}`;
+      const d =
+        totalIn >= totalOut
+          ? `M${f(bx)} ${f(by)}L${f(ax)} ${f(ay)}`
+          : `M${f(ax)} ${f(ay)}L${f(bx)} ${f(by)}`;
       this.edge("trunk", d, v.total_bps, null, wanted);
     }
     for (const it of items) {
@@ -521,7 +535,9 @@ export class NetView {
       .sort((a, b) => (SEV[b.host.severity] || 0) - (SEV[a.host.severity] || 0))
       .slice(0, 2);
     const placed = [];
-    this.calloutsG.replaceChildren(...flagged.map((it) => this.callout(it, placed)));
+    this.calloutsG.replaceChildren(
+      ...flagged.map((it) => this.callout(it, placed)),
+    );
     if (this.hoverKey) this.applyHover();
   }
 
@@ -628,8 +644,10 @@ export class NetView {
       it.key === "self"
         ? "This Mac"
         : it.key === "gw"
-          ? "Gateway"
-          : h.name || h.ip || "";
+          ? "Gateway · router"
+          : it.zone === "slab" && !it.others
+            ? this.displayName(h)
+            : h.name || h.ip || "";
     let sub;
     if (it.key === "self" || it.key === "gw") sub = h.ip || "";
     else if (it.others) sub = fmtRate(h.bps);
@@ -637,7 +655,13 @@ export class NetView {
     else if (it.zone === "column")
       sub = [h.cc, fmtRate(h.bps), fmtPct(h.share)].filter(Boolean).join(" · ");
     else sub = h.ip;
-    const labelSig = `${name}|${sub}|${it.zone}|${scale}`;
+    // Labels on the slab share a row with their neighbours: size them to the gap.
+    // This Mac and the router sit alone on their row, so they can use the full width.
+    const room =
+      it.key === "self" || it.key === "gw"
+        ? { name: 18, sub: 30 }
+        : slabLabelChars(this.geom.S);
+    const labelSig = `${name}|${sub}|${it.zone}|${scale}|${room.name}`;
     if (n.labelSig !== labelSig) {
       n.labelSig = labelSig;
       if (it.zone === "column") {
@@ -658,26 +682,51 @@ export class NetView {
             x: 0,
             y: 26,
             "text-anchor": "middle",
-            text: truncate(name, 18),
+            text: truncate(name, room.name),
           }),
           svg("text", {
             class: "node-sub",
             x: 0,
             y: 39,
             "text-anchor": "middle",
-            text: truncate(sub, 30),
+            text: fitMiddle(sub, room.sub),
           }),
         );
       }
     }
   }
 
+  /** Two devices both called "iPhone" become "iPhone 1" and "iPhone 2" (ordered by address). */
+  displayName(h) {
+    const base = h.name || h.ip || "";
+    const same = (this.view?.lan || []).filter((x) => (x.name || x.ip) === base);
+    if (same.length < 2) return base;
+    const order = same.map((x) => x.ip).sort();
+    return `${base} ${order.indexOf(h.ip) + 1}`;
+  }
+
+  /** The name the map shows for an address (This Mac, Gateway, a host name), else the address. */
+  nameFor(ip) {
+    const v = this.view;
+    if (!v || !ip) return ip;
+    if (v.self?.ip === ip) return "This Mac";
+    if (v.gateway?.ip === ip) return "Gateway";
+    const lan = (v.lan || []).find((x) => x.ip === ip);
+    if (lan) return lan.name && lan.name !== ip ? this.displayName(lan) : ip;
+    const h = (v.internet || []).find((x) => x.ip === ip);
+    return h?.name && h.name !== ip ? h.name : ip;
+  }
+
   /** Rectangles the callout tags must stay clear of (incident card, internet column). */
   obstacles() {
     const out = [];
     if (!this.incident.hidden) {
-      out.push([this.incident.offsetLeft - 6, this.incident.offsetTop - 6,
-        this.incident.offsetWidth + 12, this.incident.offsetHeight + 12]);
+      out.push([
+        this.incident.offsetLeft - 6,
+        this.incident.offsetTop - 6,
+        this.incident.offsetWidth + 12,
+        this.incident.offsetHeight + 12,
+      ]);
     }
     out.push([this.colX - 30, 0, this.W - this.colX + 30, this.H]);
     return out;
@@ -689,17 +738,44 @@ export class NetView {
     const warn = sev === "medium" ? " warn" : "";
     const height = (this.nodes.get(it.key)?.meta?.height || 16) * 1.3 + 6;
     const [x, y] = it.pos;
-    const k = (h.title || "Alert").toUpperCase();
+    // Two devices can raise the same alert: say which one this tag belongs to.
+    const who =
+      it.key === "self"
+        ? "This Mac"
+        : fitMiddle(it.zone === "slab" ? this.displayName(h) : h.name || h.ip || "", 14);
+    const k = `${(h.title || "Alert").toUpperCase()} · ${who}`;
     const v = truncate(h.reason || "", 34);
     const w = Math.max(k.length * 7.4, v.length * 6.3) + 22;
     const tagH = 34;
-    const blocked = [...this.obstacles(), ...placed];
-    const hits = (r) => blocked.some((b) => r[0] < b[0] + b[2] && r[0] + r[2] > b[0]
-      && r[1] < b[1] + b[3] && r[1] + r[3] > b[1]);
-    const inside = (r) => r[0] >= 8 && r[1] >= 8 && r[0] + r[2] <= this.W - 8 && r[1] + r[3] <= this.H - 8;
+    // Other devices on the slab (body and two-line label) are obstacles too.
+    const nodeRects = [];
+    for (const [key, n] of this.nodes) {
+      if (key === it.key || !n.item || n.item.zone === "column") continue;
+      const [nx, ny] = n.item.pos;
+      const nh = (n.meta?.height || 16) * 1.3 + 6;
+      nodeRects.push([nx - 30, ny - nh, 60, nh + 8]);
+      nodeRects.push([nx - 64, ny + 15, 128, 30]);
+    }
+    const blocked = [...this.obstacles(), ...nodeRects, ...placed];
+    const hits = (r) =>
+      blocked.some(
+        (b) =>
+          r[0] < b[0] + b[2] &&
+          r[0] + r[2] > b[0] &&
+          r[1] < b[1] + b[3] &&
+          r[1] + r[3] > b[1],
+      );
+    const inside = (r) =>
+      r[0] >= 8 &&
+      r[1] >= 8 &&
+      r[0] + r[2] <= this.W - 8 &&
+      r[1] + r[3] <= this.H - 8;
     // Elbow: vertical from the device, a short 26.57° run along the grid, then horizontal.
     const shapes = [
-      { up: true, sx: 1 }, { up: true, sx: -1 }, { up: false, sx: 1 }, { up: false, sx: -1 },
+      { up: true, sx: 1 },
+      { up: true, sx: -1 },
+      { up: false, sx: 1 },
+      { up: false, sx: -1 },
     ].map(({ up, sx }) => {
       const p0 = up ? [x, y - height] : [x, y + 8];
       const p1 = [x, p0[1] + (up ? -20 : 46)];
@@ -707,9 +783,18 @@ export class NetView {
       const p3 = [x + sx * 28, p2[1]];
       const tx = sx > 0 ? p3[0] : p3[0] - w;
       const rect = [tx, p3[1] - 17, w, tagH];
-      return { pts: [p0, p1, p2, p3], rect };
+      // The leader line must be clear too, not just the tag at its end.
+      const legs = [
+        [x - 2, Math.min(p0[1], p1[1]), 4, Math.abs(p0[1] - p1[1])],
+        [Math.min(p2[0], p3[0]), p3[1] - 2, Math.abs(p3[0] - p2[0]) + 2, 4],
+      ];
+      return { pts: [p0, p1, p2, p3], rect, legs };
     });
-    const pick = shapes.find((s) => inside(s.rect) && !hits(s.rect)) || shapes.find((s) => inside(s.rect)) || shapes[0];
+    const pick =
+      shapes.find((s) => inside(s.rect) && ![s.rect, ...s.legs].some(hits)) ||
+      shapes.find((s) => inside(s.rect) && !hits(s.rect)) ||
+      shapes.find((s) => inside(s.rect)) ||
+      shapes[0];
     placed.push(pick.rect);
     const [p0, p1, p2, p3] = pick.pts;
     const line = svg("path", {
@@ -718,12 +803,20 @@ export class NetView {
     });
     const [tx, ty] = pick.rect;
     const notch = `M${f(tx)} ${f(ty)}H${f(tx + w - 8)}L${f(tx + w)} ${f(ty + 8)}V${f(ty + tagH)}H${f(tx)}Z`;
-    const tag = svg("g", { class: `callout-tag${warn}` },
+    const tag = svg(
+      "g",
+      { class: `callout-tag${warn}` },
       svg("path", { d: notch, class: "tag-bg" }),
       svg("text", { class: "k", x: f(tx + 10), y: f(ty + 15), text: k }),
-      svg("text", { class: "v", x: f(tx + 10), y: f(ty + 28), text: v }));
+      svg("text", { class: "v", x: f(tx + 10), y: f(ty + 28), text: v }),
+    );
     const id = `${it.key}|${h.alert_id}`;
-    const g = svg("g", { class: this.calloutSeen.has(id) ? "" : "callout-new" }, line, tag);
+    const g = svg(
+      "g",
+      { class: this.calloutSeen.has(id) ? "" : "callout-new" },
+      line,
+      tag,
+    );
     this.calloutSeen.add(id);
     return g;
   }
@@ -786,7 +879,9 @@ export class NetView {
     bar.label.setAttribute("y", geo.bar.y - 10);
 
     const hogs = new Map(
-      (v.incidents || []).filter((i) => i.kind === "bandwidth_hog").map((i) => [i.hosts?.[0], i]),
+      (v.incidents || [])
+        .filter((i) => i.kind === "bandwidth_hog")
+        .map((i) => [i.hosts?.[0], i]),
     );
     geo.items.forEach((it, i) => {
       const h = usable[i];
@@ -989,16 +1084,23 @@ export class NetView {
     const inc = list[this.incidentIdx];
     const h = inc.host || {};
     const sev = sevClass(inc.severity) || "high";
-    this.incident.className = `incident hud-notch sev-${sev === "high" ? "high" : "medium"}${fresh.length ? " flash" : ""}`;
+    // Show the whole card when an incident first appears, then shrink it to its headline so it
+    // stops covering the map. Hovering the card brings the details back.
+    if (!this.incSeen.has(inc.id)) this.incSeen.set(inc.id, Date.now());
+    const compact = !fresh.length && Date.now() - this.incSeen.get(inc.id) > 6000;
+    this.incident.className = `incident hud-notch sev-${sev === "high" ? "high" : "medium"}${compact ? " is-compact" : ""}${fresh.length ? " flash" : ""}`;
     const nums = [];
-    const liveShare = v.total_bps > 0 && h.bps != null ? h.bps / v.total_bps : null;
+    const liveShare =
+      v.total_bps > 0 && h.bps != null ? h.bps / v.total_bps : null;
     if (inc.kind === "bandwidth_hog" && inc.detail) {
       nums.push(["red", fmtRate(h.bps ?? inc.detail.bps), "now"]);
       nums.push(["", fmtPct(liveShare ?? inc.detail.share), "of traffic"]);
-      if (inc.detail.vs_normal != null) nums.push(["", `+${Math.round(inc.detail.vs_normal)}%`, "vs normal"]);
+      if (inc.detail.vs_normal != null)
+        nums.push(["", `+${Math.round(inc.detail.vs_normal)}%`, "vs normal"]);
     } else if (inc.kind === "port_scan" && inc.detail) {
       nums.push(["red", String(inc.detail.ports), "ports probed"]);
-      const target = inc.detail.target === v.self?.ip ? "This Mac" : inc.detail.target || "";
+      const target =
+        inc.detail.target === v.self?.ip ? "This Mac" : inc.detail.target || "";
       nums.push(["", truncate(target, 15), "target"]);
     } else if (inc.kind === "cleartext_credentials" && inc.detail) {
       nums.push(["red", truncate(inc.detail.field || "secret", 10), "field"]);
@@ -1051,6 +1153,9 @@ export class NetView {
           ),
         ),
       ),
+      alertInfo(inc.kind)
+        ? el("div", { class: "means", text: alertInfo(inc.kind).means })
+        : null,
       el("div", {
         class: "foot",
         text: `${showReason ? `${inc.reason} · ` : ""}since ${clock(inc.ts)} (${ago(age)}) · click to filter`,

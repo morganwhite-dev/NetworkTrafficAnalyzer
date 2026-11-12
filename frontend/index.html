@@ -17,6 +17,12 @@
     <div class="flex items-center gap-3 min-w-0">
       <span class="brand">NETWORK TRAFFIC ANALYZER</span>
       <span class="chip" id="mode-chip"><span id="mode-text">CONNECTING</span></span>
+      <div class="seg" id="mode-toggle" role="group" aria-label="Data source" hidden>
+        <button class="seg__btn" id="mode-live" type="button" aria-pressed="false"
+                data-tip="Watch this Mac's real network traffic">Live</button>
+        <button class="seg__btn" id="mode-demo" type="button" aria-pressed="false"
+                data-tip="Replay 90 seconds of made-up home traffic that triggers every kind of alert">Demo</button>
+      </div>
     </div>
 
     <div class="flex items-center gap-2 ml-2">
@@ -24,34 +30,42 @@
         <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-player-play"></use></svg>
         <span>Start</span>
       </button>
-      <button class="btn" id="btn-clear" type="button" title="Clear the capture">
+      <button class="btn" id="btn-clear" type="button" data-tip="Clear everything captured so far">
         <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-trash"></use></svg>
         <span>Clear</span>
       </button>
-      <button class="btn" id="btn-export" type="button" title="Download this session as a .pcap for Wireshark">
+      <button class="btn" id="btn-export" type="button" data-tip="Save this session as a .pcap file you can open in Wireshark">
         <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-download"></use></svg>
-        <span>Export PCAP</span>
+        <span>Save capture</span>
       </button>
-      <button class="btn" id="btn-upload" type="button" title="Analyse a .pcap or .pcapng file">
+      <button class="btn" id="btn-upload" type="button" data-tip="Analyse a saved .pcap or .pcapng capture file instead of live traffic">
         <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-upload"></use></svg>
         <span>Open file</span>
       </button>
       <input type="file" id="file-input" accept=".pcap,.pcapng,.cap" class="sr-only" tabindex="-1">
       <span class="sep"></span>
       <label class="sr-only" for="iface-select">Interface</label>
-      <select class="select" id="iface-select" title="Network interface"></select>
+      <select class="select" id="iface-select" data-tip="Which network connection to watch. en0 is usually Wi-Fi."></select>
     </div>
 
     <div class="flex items-center gap-4 ml-auto">
-      <div class="readout"><span class="label">PACKETS/S</span><span class="value" id="ro-pps">0</span></div>
-      <div class="readout"><span class="label">BANDWIDTH</span><span class="value" id="ro-bps">0 B/s</span></div>
+      <div class="readout" data-tip="Packets per second: how many small chunks of data are moving right now"><span class="label">PACKETS/S</span><span class="value" id="ro-pps">0</span></div>
+      <div class="readout" data-tip="Bandwidth: how much data is moving right now"><span class="label">BANDWIDTH</span><span class="value" id="ro-bps">0 B/s</span></div>
       <span class="sep"></span>
-      <span class="chip" id="geo-chip" title="Geo-IP provider">GEO —</span>
-      <button class="btn btn-icon" id="btn-mute" type="button" aria-label="Mute sounds" aria-pressed="false">
+      <button class="btn btn-icon" id="btn-mute" type="button" aria-label="Mute sounds" aria-pressed="false" data-tip="Alert sounds on or off">
         <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-volume"></use></svg>
       </button>
+      <button class="btn btn-icon btn-guide" id="btn-help" type="button" aria-label="How to read this dashboard" data-tip="How to read this dashboard">?</button>
     </div>
   </header>
+
+  <div class="firstrun" id="firstrun" hidden>
+    <span><b>New here?</b> Green means normal and red means look at this. Click any device, server or alert to
+      see its packets. Press <b>Demo</b> to watch it react to made-up trouble. Alerts make a sound; the
+      speaker icon mutes them.</span>
+    <button class="btn" id="firstrun-guide" type="button">Open the guide</button>
+    <button class="btn" id="firstrun-dismiss" type="button">Got it</button>
+  </div>
 
   <div class="banner" id="banner" hidden>
     <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-alert-triangle"></use></svg>
@@ -62,23 +76,27 @@
     <section class="grid gap-3 grid-cols-12" aria-label="Network">
       <article class="panel hud-brackets col-span-12 xl:col-span-8 h-[500px]" id="panel-network">
         <header class="panel__head">
-          <span class="idx">01 /</span><span class="title">Network</span>
+          <span class="idx">01 /</span><span class="title">Network</span><span class="help" data-help="network" tabindex="0" role="note" aria-label="About this panel">?</span>
           <div class="tabs" role="tablist" aria-label="Network view">
-            <button class="tab" role="tab" id="tab-map" aria-selected="true" aria-controls="netview">Map</button>
-            <button class="tab" role="tab" id="tab-flows" aria-selected="false" aria-controls="netview">Flows</button>
-            <button class="tab" role="tab" id="tab-wifi" aria-selected="false" aria-controls="wifiview">Wi-Fi</button>
+            <button class="tab" role="tab" id="tab-map" aria-selected="true" aria-controls="netview" data-tip="Map: your devices, your router and the internet servers you talk to">Map</button>
+            <button class="tab" role="tab" id="tab-flows" aria-selected="false" aria-controls="netview" data-tip="Flows: who is using your bandwidth, biggest first">Flows</button>
+            <button class="tab" role="tab" id="tab-wifi" aria-selected="false" aria-controls="wifiview" data-tip="Wi-Fi: signal strength and how fast your router and the internet answer">Wi-Fi</button>
           </div>
           <span class="stat" id="nv-stat"></span>
         </header>
         <div class="panel__body">
           <div class="netview" id="netview" role="tabpanel" aria-label="Network map"></div>
+          <div class="nv-empty" id="nv-empty" hidden>
+            <div class="nv-empty__title">Nothing to show yet</div>
+            <div id="nv-empty-text">Press <b>Start</b> to watch this Mac, or try <b>Demo</b>.</div>
+          </div>
           <div class="wifiview" id="wifiview" role="tabpanel" aria-label="Wi-Fi check" hidden></div>
         </div>
       </article>
 
       <article class="panel col-span-12 xl:col-span-4 h-[500px]">
         <header class="panel__head">
-          <span class="idx">02 /</span><span class="title">Alerts</span>
+          <span class="idx">02 /</span><span class="title">Alerts</span><span class="help" data-help="alerts" tabindex="0" role="note" aria-label="About this panel">?</span>
           <span class="stat" id="alerts-stat"></span>
         </header>
         <div class="panel__body"><div class="alerts" id="alerts" aria-live="polite"></div></div>
@@ -88,20 +106,20 @@
     <section class="grid gap-3 grid-cols-12" aria-label="Charts">
       <article class="panel col-span-12 lg:col-span-5 h-[220px]">
         <header class="panel__head">
-          <span class="idx">03 /</span><span class="title">Bandwidth</span>
+          <span class="idx">03 /</span><span class="title">Bandwidth</span><span class="help" data-help="bandwidth" tabindex="0" role="note" aria-label="About this panel">?</span>
           <span class="stat" id="bw-stat"></span>
         </header>
         <div class="panel__body"><div class="chart-wrap"><canvas id="bw-chart"></canvas></div></div>
       </article>
       <article class="panel col-span-12 md:col-span-6 lg:col-span-3 h-[220px]">
         <header class="panel__head">
-          <span class="idx">04 /</span><span class="title">Protocols</span>
+          <span class="idx">04 /</span><span class="title">Protocols</span><span class="help" data-help="protocols" tabindex="0" role="note" aria-label="About this panel">?</span>
         </header>
         <div class="panel__body">
           <div class="donut-wrap">
             <div class="donut-box">
               <canvas id="proto-chart" width="132" height="132"></canvas>
-              <div class="donut-center"><div><div class="n" id="proto-total">0</div><div class="l">PACKETS</div></div></div>
+              <div class="donut-center"><div><div class="n" id="proto-total">0</div><div class="l" data-tip="All packets since capture started. The table below keeps the latest 10,000.">TOTAL</div></div></div>
             </div>
             <table class="proto-table" id="proto-table" aria-label="Protocol shares"></table>
           </div>
@@ -109,31 +127,36 @@
       </article>
       <article class="panel col-span-12 md:col-span-6 lg:col-span-4 h-[220px]">
         <header class="panel__head">
-          <span class="idx">05 /</span><span class="title">Geo-IP</span>
+          <span class="idx">05 /</span><span class="title">Geo-IP</span><span class="help" data-help="geo" tabindex="0" role="note" aria-label="About this panel">?</span>
           <span class="stat" id="geo-stat"></span>
         </header>
         <div class="panel__body"><div id="geomap"></div><div class="geo-note" id="geo-note"></div></div>
       </article>
     </section>
 
-    <section class="flex gap-3 h-[520px]" aria-label="Packets">
+    <section class="flex gap-3 h-[520px]" aria-label="Packets" id="panel-packets">
       <article class="panel flex-1">
         <header class="panel__head">
-          <span class="idx">06 /</span><span class="title">Packets</span>
+          <span class="idx">06 /</span><span class="title">Packets</span><span class="help" data-help="packets" tabindex="0" role="note" aria-label="About this panel">?</span>
           <div class="filterbar">
             <label class="sr-only" for="filter-input">Filter packets</label>
             <input class="filter-input" id="filter-input" spellcheck="false" autocomplete="off"
-                   placeholder="ip == 192.168.1.10 and proto == TLS">
+                   placeholder="Filter: try  proto == DNS  or click a device">
             <span class="filter-error" id="filter-error"></span>
             <span id="filter-chip-slot"></span>
+            <span class="fchips" role="group" aria-label="Quick filters">
+              <button type="button" class="fchip" data-quick="problems" data-tip="Only packets to or from hosts flagged red">Only problems</button>
+              <button type="button" class="fchip" data-quick="proto == TLS or proto == QUIC" data-tip="Only encrypted web traffic">Encrypted</button>
+              <button type="button" class="fchip" data-quick="proto == DNS" data-tip="Only name lookups">DNS</button>
+            </span>
           </div>
           <span class="stat" id="table-stat"></span>
         </header>
         <div class="panel__body">
           <div class="ptable">
             <div class="ptable__head" role="row">
-              <span>Time</span><span>Source</span><span>Destination</span><span>Proto</span>
-              <span class="r">Len</span><span>Info</span>
+              <span data-tip="Seconds since the capture started">Time (s)</span><span data-tip="Who sent it. Names come from the map; hover a row for the raw address.">From</span><span data-tip="Who it was sent to">To</span><span data-tip="What kind of traffic it is. Hover a protocol in the Protocols panel for what each means.">Proto</span>
+              <span class="r" data-tip="Size of the packet in bytes">Size</span><span data-tip="The technical details of this packet">Info</span>
             </div>
             <div class="ptable__scroll" id="ptable-scroll" role="grid" aria-label="Captured packets">
               <div class="ptable__spacer" id="ptable-spacer"></div>
@@ -148,13 +171,13 @@
 
       <article class="panel inspector" id="inspector">
         <header class="panel__head">
-          <span class="idx">07 /</span><span class="title">Inspector</span>
+          <span class="idx">07 /</span><span class="title">Inspector</span><span class="help" data-help="inspector" tabindex="0" role="note" aria-label="About this panel">?</span>
           <button class="btn btn-icon ml-auto" id="btn-inspector" type="button" aria-label="Collapse inspector">
             <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-layout-sidebar-right-collapse"></use></svg>
           </button>
         </header>
         <div class="panel__body"><div class="insp-scroll" id="insp-body">
-          <div class="empty">Click a packet to see its decoded headers and a hex dump.</div>
+          <div class="empty">Click a packet to see it explained in plain words, with its decoded headers and raw bytes below.</div>
         </div></div>
       </article>
     </section>
@@ -169,6 +192,17 @@
       <button class="btn" id="export-headers" type="button">Headers only</button>
       <button class="btn btn-start" id="export-full" type="button">Full capture</button>
     </div>
+  </dialog>
+
+  <dialog id="help-dialog" class="help-dialog" aria-labelledby="help-title">
+    <header class="help-dialog__head">
+      <h2 id="help-title">How to read this dashboard</h2>
+      <button class="btn" id="help-close" type="button">Close</button>
+    </header>
+    <div class="help-dialog__body" id="help-body"></div>
+    <footer class="help-dialog__foot">
+      <span>Geo-IP</span><span class="chip" id="geo-chip" data-tip="Geo-IP provider">GEO —</span>
+    </footer>
   </dialog>
 
   <div class="toasts" id="toasts" aria-live="assertive"></div>
