@@ -51,6 +51,9 @@ class Pipeline:
         self.engine = Engine(self.hosts, self.alerts)
         self.inbox: deque = deque()
         self.dropped = 0
+        self.kernel_recv = 0          # packets the kernel handed to the capture socket
+        self.kernel_drop = 0          # packets the kernel discarded because we read too slowly
+        self.kernel_drop_base = 0     # drops that happened before the last Clear
         self.out_rows: deque[dict[str, Any]] = deque(maxlen=OUTBOX_MAX)
         self.out_skipped = 0
         self.mode = "idle"            # idle | live | replay | file
@@ -143,6 +146,14 @@ class Pipeline:
             self.alerts.updated.clear()
         return rows, skipped, alerts + [{**u, "update": True} for u in updated]
 
+    def set_kernel_stats(self, received: int, dropped: int) -> None:
+        """Called by the capture reader: the kernel's own count of what it saw and discarded."""
+        self.kernel_recv, self.kernel_drop = received, dropped
+
+    @property
+    def kernel_dropped(self) -> int:
+        return max(0, self.kernel_drop - self.kernel_drop_base)
+
     def stats_message(self) -> dict[str, Any]:
         with self.lock:
             now = self.now()
@@ -150,7 +161,8 @@ class Pipeline:
             return {"type": "stats", "pps": pps, "bps": bps, "t": int(now) - 1,
                     "packets": self.stats.total_packets, "bytes": self.stats.total_bytes,
                     "protocols": dict(self.stats.protocols), "dropped": self.dropped,
-                    "stored": len(self.store), "evicted": self.store.evicted,
+                    "kernel_dropped": self.kernel_dropped, "stored": len(self.store),
+                    "evicted": self.store.evicted,
                     "spike": self.engine.spike_run > 0}
 
     def incidents(self, now: float, limit: int = 6) -> list[dict[str, Any]]:
@@ -253,6 +265,7 @@ class Pipeline:
             self.engine.vpn = vpn
             self.out_rows.clear()
             self.dropped = 0
+            self.kernel_drop_base = self.kernel_drop
             self.clock = 0.0
             self.generation += 1
 

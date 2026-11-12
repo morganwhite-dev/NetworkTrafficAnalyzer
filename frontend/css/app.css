@@ -2080,3 +2080,12 @@ main {
 .drawer__body[hidden] {
   display: none;
 }
+
+.chip.is-warn {
+  color: var(--warn);
+  border-color: rgba(255, 176, 0, 0.45);
+  background: var(--warn-fill);
+}
+.chip[hidden] {
+  display: none;
+}

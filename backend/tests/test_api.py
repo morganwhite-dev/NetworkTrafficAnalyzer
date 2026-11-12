@@ -370,3 +370,58 @@ def test_netview_lists_every_address_of_this_mac():
     me = ht.netview(time.time())["self"]
     assert me["ip"] == "192.168.1.23"
     assert set(me["addrs"]) == {"192.168.1.23", "2607:b940:0:407b::fc3", "fe80::1"}
+
+
+def test_bpf_reader_splits_a_kernel_buffer_into_frames_and_reports_drops():
+    """The capture reader pulls frames out of a raw BPF buffer, honouring its 4-byte alignment."""
+    import os
+    import struct
+    import time
+
+    from app.capture import BpfReader
+
+    def entry(ts_sec, ts_usec, frame, wirelen):
+        hdr = struct.pack("=IIIIH", ts_sec, ts_usec, len(frame), wirelen, 18)
+        raw = hdr + frame
+        return raw + b"\0" * (-len(raw) % 4)           # BPF_WORDALIGN
+
+    class Sock:
+        guessed_cls = None
+        def __init__(self, fd):
+            self.bpf_fd = fd
+        def get_blen(self):
+            return 65536
+        def get_stats(self):
+            return (1000, 7)
+
+    class Pipe:
+        def __init__(self):
+            self.got, self.kernel = [], None
+        def submit(self, frame, ts, linktype, wirelen):
+            self.got.append((frame, round(ts, 6), linktype, wirelen))
+        def set_kernel_stats(self, received, dropped):
+            self.kernel = (received, dropped)
+
+    r, w = os.pipe()
+    pipe = Pipe()
+    reader = BpfReader(Sock(r), pipe)
+    reader.start()
+    os.write(w, entry(100, 500_000, b"A" * 61, 1514) + entry(101, 0, b"B" * 60, 60))
+    for _ in range(100):
+        if len(pipe.got) == 2:
+            break
+        time.sleep(0.02)
+    reader.stop()
+    os.close(r)
+    os.close(w)
+    assert pipe.got == [(b"A" * 61, 100.5, 1, 1514), (b"B" * 60, 101.0, 1, 60)]
+    assert pipe.kernel == (0, 0)                        # drops are reported relative to the start
+
+
+def test_clear_resets_the_missed_packet_count(runtime):
+    runtime.pipeline.set_kernel_stats(500, 40)
+    assert runtime.pipeline.kernel_dropped == 40
+    runtime.pipeline.clear()
+    assert runtime.pipeline.kernel_dropped == 0
+    runtime.pipeline.set_kernel_stats(900, 55)
+    assert runtime.pipeline.kernel_dropped == 15

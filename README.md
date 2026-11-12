@@ -23,6 +23,7 @@ I wanted to see what my Mac is actually doing on the network in real time. Wires
 
 - **Live packet capture** on any macOS interface (Wi-Fi `en0` by default), plus a **demo replay** that needs no root at all, with a **Live | Demo switch** in the top bar so you can flip between your real traffic and the demo without restarting
 - **Built to be understood:** a `?` guide explaining every panel, colour and protocol; hover help on the numbers, tabs and table headings; "what it means / what to do" on every alert; and a first-run hint
+- **Counts you can trust:** checked against macOS's own interface counters, it catches about 99.5% of the packets of a heavy download, and shows a **MISSED** counter in the top bar if it ever falls behind
 - **Isometric network map:** this Mac, the router, home devices and internet hosts, with packets flowing along each link at a speed that matches the real throughput
 - **Flows view:** ribbons sized by each host's share of your bandwidth, so a hog is obvious at a glance
 - **Wi-Fi check:** signal strength plus how fast your router and the internet answer, turned into one plain answer: weak signal, busy Wi-Fi, Wi-Fi hiccups, or a slow internet connection (works without capture permission)

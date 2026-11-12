@@ -25,7 +25,7 @@ flowchart LR
 
 | Piece           | Where it runs                | Why                                                            |
 | --------------- | ---------------------------- | -------------------------------------------------------------- |
-| Sniffer         | Scapy `AsyncSniffer` thread  | Reads the BPF socket opened at startup                         |
+| Sniffer         | `BpfReader` thread           | Reads the BPF socket (512 KB kernel buffer) as fast as it can and parses nothing, so the kernel never has to drop packets. Linux uses Scapy's sniffer instead |
 | Replay          | its own thread               | Re-stamps packets to "now" at the original pace                |
 | Pipeline        | one worker thread            | Owns all analysis state, so there are no fine-grained locks    |
 | Web server      | asyncio event loop (uvicorn) | Never parses packets itself, so it stays responsive            |

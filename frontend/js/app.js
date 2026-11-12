@@ -473,6 +473,18 @@ function flaggedSet(view) {
   return set;
 }
 
+// Packets the capture could not keep up with. Zero in normal use; shown so the numbers can be trusted.
+function renderMissed(n) {
+  const chip = $("drop-chip");
+  chip.hidden = n <= 0;
+  if (n <= 0) return;
+  chip.textContent = `MISSED ${fmtCount(n)}`;
+  chip.setAttribute(
+    "data-tip",
+    `${n.toLocaleString()} packets crossed the network but the app could not keep up, so the counts are slightly lower than the real traffic. Press Clear to reset this number.`,
+  );
+}
+
 function applyStats(s, initial = false) {
   if (!s) return;
   const file = state.status?.mode === "file";
@@ -486,6 +498,7 @@ function applyStats(s, initial = false) {
   $("ro-bps").previousElementSibling.textContent = file ? "TOTAL" : "BANDWIDTH";
   charts.setProtocols(s.protocols || {});
   if (!initial && !file) charts.pushPoint(s.t, s.bps, s.spike);
+  renderMissed((s.dropped || 0) + (s.kernel_dropped || 0));
   if (s.dropped)
     $("table-stat").title =
       `${s.dropped} packets dropped because the app couldn't keep up`;
