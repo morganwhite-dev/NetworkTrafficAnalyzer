@@ -950,6 +950,8 @@ select {
 
 /* ---------- dialogs & toasts ---------- */
 dialog {
+  margin: auto;
+  inset: 0;
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--line);

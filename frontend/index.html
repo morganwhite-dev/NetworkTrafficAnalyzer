@@ -37,13 +37,13 @@
         <button class="btn btn-icon" id="btn-more" type="button" aria-haspopup="menu" aria-expanded="false"
                 aria-controls="more-list" aria-label="More actions" data-tip="More: clear, save a capture, open a capture file">&#8943;</button>
         <div class="menu__list" id="more-list" role="menu" aria-label="More actions" hidden>
-          <button class="menu__item" id="btn-clear" type="button" role="menuitem" data-tip="Clear everything captured so far">
+          <button class="menu__item" id="btn-clear" type="button" role="menuitem" data-tip-side="right" data-tip="Clear everything captured so far">
             <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-trash"></use></svg><span>Clear capture</span>
           </button>
-          <button class="menu__item" id="btn-export" type="button" role="menuitem" data-tip="Save this session as a .pcap file you can open in Wireshark">
+          <button class="menu__item" id="btn-export" type="button" role="menuitem" data-tip-side="right" data-tip="Save this session as a .pcap file you can open in Wireshark">
             <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-download"></use></svg><span>Save capture&hellip;</span>
           </button>
-          <button class="menu__item" id="btn-upload" type="button" role="menuitem" data-tip="Analyse a saved .pcap or .pcapng capture file instead of live traffic">
+          <button class="menu__item" id="btn-upload" type="button" role="menuitem" data-tip-side="right" data-tip="Analyse a saved .pcap or .pcapng capture file instead of live traffic">
             <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-upload"></use></svg><span>Open file&hellip;</span>
           </button>
         </div>

@@ -358,6 +358,7 @@ class HostTracker:
             "now": now,
             "network": self.network_label,
             "self": {"ip": me, "name": "This Mac", "kind": "self", "device": "laptop",
+                     "addrs": sorted(self.self_ips),     # every address of this Mac, v4 and v6
                      "bps": self.total_in_window(now, RATE_WINDOW) / RATE_WINDOW,
                      "severity": None} if me else None,
             "gateway": self.describe(gw, now, total60) if gw else (

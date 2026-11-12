@@ -694,7 +694,7 @@ export class NetView {
   nameFor(ip) {
     const v = this.view;
     if (!v || !ip) return ip;
-    if (v.self?.ip === ip) return "This Mac";
+    if (v.self?.ip === ip || v.self?.addrs?.includes(ip)) return "This Mac";
     if (v.gateway?.ip === ip) return "Gateway";
     const lan = (v.lan || []).find((x) => x.ip === ip);
     if (lan) return lan.name && lan.name !== ip ? this.displayName(lan) : ip;

@@ -357,3 +357,16 @@ def test_drop_does_nothing_when_not_root(monkeypatch):
     monkeypatch.setenv("NTA_DROP_UID", "10001")
     monkeypatch.setenv("NTA_DROP_GID", "10001")
     assert drop_to_sudo_user() is None
+
+
+def test_netview_lists_every_address_of_this_mac():
+    """The dashboard shows 'This Mac' for the IPv6 address too, not a raw global address."""
+    import time
+
+    from app.hosts import HostTracker
+
+    ht = HostTracker(100)
+    ht.configure({"192.168.1.23", "2607:b940:0:407b::fc3", "fe80::1"}, ["192.168.1.0/24"], None)
+    me = ht.netview(time.time())["self"]
+    assert me["ip"] == "192.168.1.23"
+    assert set(me["addrs"]) == {"192.168.1.23", "2607:b940:0:407b::fc3", "fe80::1"}

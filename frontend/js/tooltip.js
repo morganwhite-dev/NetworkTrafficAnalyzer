@@ -30,11 +30,17 @@ function show(target) {
   const th = t.offsetHeight;
   const margin = 8;
   let x = r.left + r.width / 2 - tw / 2;
+  let y = r.bottom + 8;
+  if (target.getAttribute("data-tip-side") === "right") {
+    // Beside the element (menu items), so it doesn't cover the item below.
+    x = r.right + 10;
+    y = r.top + r.height / 2 - th / 2;
+  }
   x = Math.max(margin, Math.min(x, window.innerWidth - tw - margin));
   // Below the element, or above it when there isn't room.
-  let y = r.bottom + 8;
   if (y + th > window.innerHeight - margin)
     y = Math.max(margin, r.top - th - 8);
+  y = Math.max(margin, y);
   t.style.left = `${Math.round(x)}px`;
   t.style.top = `${Math.round(y)}px`;
 }

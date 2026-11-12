@@ -85,7 +85,9 @@ export class Inspector {
       }),
       el("div", {
         class: "meta",
-        text: `${r.src}${r.sport != null ? `:${r.sport}` : ""} → ${r.dst}${r.dport != null ? `:${r.dport}` : ""}`,
+        // The same names the map and table use; the raw addresses stay in the hover text.
+        text: `${this.labelFor(r.src)}${r.sport != null ? `:${r.sport}` : ""} → ${this.labelFor(r.dst)}${r.dport != null ? `:${r.dport}` : ""}`,
+        title: `${r.src}${r.sport != null ? `:${r.sport}` : ""} → ${r.dst}${r.dport != null ? `:${r.dport}` : ""}`,
       }),
       el("div", {
         class: "meta",
