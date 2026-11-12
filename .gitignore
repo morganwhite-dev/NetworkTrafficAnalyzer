@@ -28,3 +28,6 @@ exports/
 
 # raw screen recordings (the finished video in docs/demo/ is what gets committed)
 docs/demo/raw/
+
+# personal commit-message template (set with git config commit.template)
+.gitmessage

@@ -11,6 +11,8 @@
 
 **[Watch the 90-second demo video](docs/demo/network-traffic-analyzer-demo.mp4)**: recorded on a real, live capture of my own Mac, not the staged demo data above.
 
+**Jump to:** [Features](#features) · [Run it](#get-it-running-on-macos) · [Docker](#docker-optional) · [Screenshots](#screenshots) · [Filters](#filter-cheat-sheet) · [Documentation](#documentation) · [Project structure](#project-structure)
+
 ## Why I built it
 
 I wanted to see what my Mac is actually doing on the network in real time. Wireshark can answer that, but it's a wall of packets, and I wanted something I could glance at. So I built a dashboard that captures my Mac's traffic live and draws my home network as a little 3D map: my Mac, the router, the other devices on my Wi-Fi, and every server on the internet I'm talking to. Normal traffic flows along the lines in green. When something's wrong (one server hogging the bandwidth, a device scanning my ports, a password going out without encryption), that node turns red and a card in the corner tells me what happened in plain words.
@@ -171,39 +173,62 @@ Every screenshot comes from the bundled demo capture and synthetic Wi-Fi reading
 
 More in [docs/FILTERS.md](docs/FILTERS.md).
 
+## Documentation
+
+| Read this                                          | For                                                                  |
+| -------------------------------------------------- | -------------------------------------------------------------------- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)       | how it works: threads, messages, endpoints, limits, the frontend     |
+| [docs/DETECTIONS.md](docs/DETECTIONS.md)           | every alert, what triggers it, and what is usually harmless          |
+| [docs/FILTERS.md](docs/FILTERS.md)                 | the packet filter language                                           |
+| [docs/DESIGN.md](docs/DESIGN.md)                   | the visual design: the 3D map, page layout, colours and motion       |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | permissions, interfaces, an empty map, Docker on a Mac               |
+| [SECURITY.md](SECURITY.md)                         | how it protects you, and how to report a vulnerability               |
+| [scripts/README.md](scripts/README.md)             | what each script does                                                |
+
 ## How it works
 
-One Python process captures packets on a background thread, analyses them on a second thread, and streams batched updates to the browser over a WebSocket every 200 ms. The dashboard never parses packets itself. It just draws what it's told. Every buffer has a size cap, so a packet flood can't eat your memory. The full picture, including the message types and API, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the design rules for the look are in [docs/DESIGN.md](docs/DESIGN.md).
+One Python process captures packets on a background thread, analyses them on a second thread, and streams batched updates to the browser over a WebSocket every 200 ms. The dashboard never parses packets itself. It just draws what it's told. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the diagram and the details.
 
 ## Project structure
 
 ```text
 NetworkTrafficAnalyzer/
-├── backend/app/          capture, parsing, detectors, host tracker, Geo-IP, FastAPI app
-├── backend/tests/        pytest suite (parser, API security, detectors, Geo-IP)
-├── frontend/             dashboard: index.html, css/, js/, vendored libraries
-├── frontend/tests/       Node tests for the filter language and network layout
-├── samples/demo.pcap     90 s of synthetic traffic for the demo
-├── assets/               app icon (SVG source and .icns)
-├── scripts/              setup, run, Geo-IP download, demo builder, screenshots, vendoring
-├── docs/                 architecture, detections, filters, design, troubleshooting, screenshots
-├── Dockerfile
-└── docker-compose.yml
+├── backend/
+│   ├── app/              the server: capture, parsing, detectors, host tracker, Geo-IP, FastAPI app
+│   └── tests/            pytest suite: parser, API and security, detectors, store, Geo-IP, Wi-Fi
+├── frontend/
+│   ├── index.html        the single page
+│   ├── css/              app.css (hand-written) and the compiled Tailwind file
+│   ├── js/               the dashboard, one small module per panel (see docs/ARCHITECTURE.md)
+│   ├── vendor/           Chart.js, Leaflet, icons, fonts and the world outline, with SHA-256 checksums
+│   └── tests/            Node tests: filters, layout maths, glossary, charts, world outline
+├── docs/
+│   ├── *.md              architecture, detections, filters, design, troubleshooting
+│   ├── screenshots/      the pictures in this README (scripts/capture_screenshots.py)
+│   └── demo/             the demo video (scripts/record_demo.py)
+├── scripts/              setup, run, install the Mac app, Geo-IP download, demo, screenshot and video tools
+├── samples/demo.pcap     90 s of synthetic traffic behind the Demo button
+├── assets/               app icon (SVG source, PNG and .icns)
+├── .github/              CI, CodeQL and Dependabot
+├── Dockerfile and docker-compose.yml
+├── requirements*.in/.txt hash-pinned Python dependencies (.in is what I chose, .txt is the lock)
+├── package.json          dev-only: compiles Tailwind and copies the vendored libraries
+└── pyproject.toml        project metadata, pytest and ruff settings
 ```
 
 ## Development
 
 ```bash
-.venv/bin/pip install --require-hashes -r requirements-dev.txt
+scripts/setup.sh                                  # venv + hash-checked dependencies
+.venv/bin/pip install --require-hashes -r requirements-dev.txt   # test and lint tools
 .venv/bin/pytest                                  # backend tests
-node --test "frontend/tests/*.test.mjs"           # filter and layout tests
+node --test "frontend/tests/*.test.mjs"           # frontend tests (filters, layout, glossary, charts)
 .venv/bin/ruff check backend scripts              # lint
+scripts/verify_vendor.sh                          # vendored libraries still match their checksums
 npm install && npm run build:css                  # only if you change Tailwind classes
 ```
 
-## Troubleshooting
-
-Permission errors, picking the right interface, an empty map and a few other things are covered in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+CI runs the same checks, plus `pip-audit`, CodeQL and a secret scan. If something doesn't work, [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) covers the usual suspects.
 
 ## Please use it responsibly
 

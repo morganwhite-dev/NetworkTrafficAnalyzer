@@ -1,6 +1,6 @@
 # Filter syntax
 
-Type in the filter bar above the packet table (press `/` to jump to it). The table updates as you type. If something doesn't parse, the error shows right next to the box.
+Type in the filter bar in the Packet details drawer at the bottom of the window (press `/` to open the drawer and jump to the bar). The table updates as you type. If something doesn't parse, the error shows right next to the box.
 
 ## Fields
 
@@ -26,7 +26,7 @@ Combine terms with `and` / `&&`, `or` / `||`, `not` / `!`, and parentheses. Two 
 - **Transports match everything on top of them:** `proto == TCP` includes TLS, HTTP and SSH; `proto == UDP` includes DNS and QUIC; `proto == ICMP` includes ICMPv6; `proto == DNS` includes mDNS.
 - **Aliases:** `HTTPS` and `SSL` mean `TLS`, and `HTTP3` means `QUIC`.
 - **Anything that isn't a field** is a free-text search across the row: `github`, `SYN`, `NXDOMAIN`.
-- **Clicking a node** on the network map, a ribbon on the Flows tab, an alert, or a dot on the world map sets `ip == <that host>` for you. Click it again, or press `Esc`, to clear it.
+- **Clicking a node** on the network map, a ribbon on the Flows tab, an alert, or a dot on the World tab sets `ip == <that host>` for you. Click it again, or press `Esc`, to clear it.
 
 ## Examples
 

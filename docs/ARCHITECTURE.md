@@ -46,9 +46,9 @@ With Wireshark's ChmodBPF installed, `/dev/bpf*` is readable by your user and no
 | `alert`        | when a detector fires                        | severity, title, reason, hosts, detail                                    |
 | `alert_update` | while an incident is still going             | the same alert with fresh numbers                                         |
 | `stats`        | every second                                 | packets/s, bytes/s, protocol counts, dropped count                        |
-| `netview`      | every second                                 | self, gateway, home devices, top internet hosts, incidents, 60 s timeline |
+| `netview`      | every second                                 | self (with all its addresses), gateway, home devices, top internet hosts, incidents, 60 s timeline |
 | `geo`          | every 2 seconds                              | located internet hosts                                                    |
-| `status`       | when capture state changes                   | mode, source, permission hints, Geo-IP provider                           |
+| `status`       | when capture state changes                   | mode, source, whether a demo is offered, permission hints, Geo-IP provider |
 | `wifi` | every 2 seconds | link details, signal and ping samples, and the plain-language verdict |
 
 ## REST endpoints
@@ -67,6 +67,10 @@ All of these need the session cookie. `POST` requests also need an exact `Origin
 | GET    | `/api/export.pcap`        | the session as a pcap (`?headers_only=1` keeps 128 bytes each) |
 | POST   | `/api/pcap`               | upload a capture as the raw request body                       |
 | POST   | `/api/geo/clear`          | delete the Geo-IP cache                                        |
+
+## Switching between Live, Demo and a file
+
+The dashboard's Live | Demo switch (and Open file) all go through the same few endpoints, and the server makes sure only one switch runs at a time, so two quick clicks or two tabs can't leave demo data labelled as live. The bundled `samples/demo.pcap` is always offered, but it only plays when asked (and loops). If Live can't start, for example without capture permission, the demo is put back instead of leaving an empty screen. While replayed or uploaded data is on screen a strip says so, and exports are named `nta-demo-…` or `nta-file-…`. See [SECURITY.md](../SECURITY.md) for why each of these exists.
 
 ## Limits
 
@@ -102,3 +106,22 @@ The verdict looks at the last minute and picks one answer, in this order:
 | Your Wi-Fi has hiccups | normally fast, but the router spiked past 50 ms twice or more in a minute |
 | Signal is on the weak side / A little slow | milder versions of the above |
 | Wi-Fi looks healthy | none of the above |
+
+## The frontend
+
+Plain ES modules, no framework and no build step for the JavaScript (only the Tailwind CSS is compiled). `app.js` wires the WebSocket stream to the panels; each panel is one small module that is told what to draw.
+
+| Module                          | Does                                                                                   |
+| ------------------------------- | -------------------------------------------------------------------------------------- |
+| `app.js`                        | entry point: the socket, top bar, Live/Demo switch, ⋯ menu, packet drawer, the filter  |
+| `ws.js`, `api.js`               | reconnecting WebSocket; `fetch` helpers that send the Origin and the request header     |
+| `netview.js`, `netlayout.js`, `iso.js` | the Map and Flows tabs: the isometric drawing, the layout maths (unit-tested), the 3D device models |
+| `geomap.js`, `worldfix.js`      | the World tab (Leaflet), and a fix for country outlines that cross the 180° line       |
+| `charts.js`                     | the bandwidth line and the protocol-share bar                                          |
+| `alerts.js`                     | the alerts feed, with the numbers and "what to do" for each alert                      |
+| `table.js`, `inspector.js`, `filter.js` | the virtualised packet table, the packet inspector, the filter language (unit-tested) |
+| `wifi.js`                       | the Wi-Fi tab                                                                          |
+| `glossary.js`, `help.js`, `tooltip.js` | all the plain-English text, the `?` guide, and the one tooltip component         |
+| `format.js`, `audio.js`         | number and time formatting, DOM helpers; the synthesised sound cues                    |
+
+Everything from the wire reaches the page through `textContent`, never `innerHTML`.

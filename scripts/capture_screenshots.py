@@ -74,8 +74,6 @@ def main() -> int:
 
         print("Saving screenshots:")
         shot(page, None, "dashboard.png")
-        page.screenshot(path=str(OUT / "dashboard-full.png"), full_page=True)
-        print("  docs/screenshots/dashboard-full.png")
         shot(page, "#panel-network", "netview-map.png")
 
         hog = page.locator(".node.is-high[data-key^='h:5.']").first

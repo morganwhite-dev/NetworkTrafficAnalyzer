@@ -1,4 +1,0 @@
-
-# Format: Phase N: <verb> <what>   e.g. "Phase 1: add pcap parser"
-# Verbs the status line understands: add, fix, test, refactor, docs, update
-# Plain wording shows on Thalamus as "On Phase 1, building pcap parser".

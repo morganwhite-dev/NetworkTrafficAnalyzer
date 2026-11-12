@@ -30,6 +30,22 @@ ChmodBPF doesn't have this limitation.
 
 The dashboard only opens through the link printed in your terminal, which has a one-time token in it. That stops other websites, and other users on the same Mac, from reading your traffic through `localhost`. Copy the link again from the terminal. A new token is made every time the app starts.
 
+## "NTA_TOKEN must be at least 16 characters"
+
+If you set your own token with `NTA_TOKEN`, it has to be at least 16 characters, because it is the only thing between other programs on your Mac and your traffic. Leave `NTA_TOKEN` unset and the app makes a strong random one for you.
+
+## I pressed Live and got an error, or the Demo came back
+
+Pressing **Live** needs capture permission (see the first entry on this page). Without it the app says so and puts the demo back instead of leaving an empty screen. Once ChmodBPF is installed (or you start with `sudo`), Live works.
+
+## Where did the packet table go?
+
+It lives in the **Packet details** bar at the bottom of the window. Click the bar to open it, or just click a device on the map or an alert and it opens by itself, filtered to that host. Press `/` to open it and jump to the filter box.
+
+## There is no Demo button
+
+The Live | Demo switch appears when `samples/demo.pcap` is present, which it is in a normal clone and in the Docker image. If you deleted that file the switch is hidden and only live capture and Open file are available.
+
 ## Which interface should I use?
 
 | Interface       | What it is                                 |
