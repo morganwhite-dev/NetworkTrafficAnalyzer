@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="80%">
+      <stop offset="0%" stop-color="#16202b"/><stop offset="60%" stop-color="#0d1117"/><stop offset="100%" stop-color="#08080a"/>
+    </radialGradient>
+    <radialGradient id="redglow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ff003c" stop-opacity=".7"/><stop offset="100%" stop-color="#ff003c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cyanglow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f3ff" stop-opacity=".35"/><stop offset="100%" stop-color="#00f3ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="slabtop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#18212c"/><stop offset="100%" stop-color="#10161e"/>
+    </linearGradient>
+    <filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="56" height="56" patternUnits="userSpaceOnUse" patternTransform="translate(512 300) matrix(1 .5 -1 .5 0 0)">
+      <path d="M56 0H0V56" fill="none" stroke="#00f3ff" stroke-opacity=".13" stroke-width="2.5"/>
+    </pattern>
+    <clipPath id="tile"><rect x="64" y="64" width="896" height="896" rx="200"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#tile)">
+    <rect x="64" y="64" width="896" height="896" fill="url(#bg)"/>
+    <ellipse cx="512" cy="534" rx="420" ry="230" fill="url(#cyanglow)"/>
+    <g transform="translate(0 64)">
+
+    <!-- slab: top diamond 168..856 wide, 50 thick -->
+    <path d="M168 472 L512 644 L512 696 L168 524 Z" fill="#0e131a"/>
+    <path d="M856 472 L512 644 L512 696 L856 524 Z" fill="#0a0e14"/>
+    <path d="M512 300 L856 472 L512 644 L168 472 Z" fill="url(#slabtop)"/>
+    <path d="M512 300 L856 472 L512 644 L168 472 Z" fill="url(#grid)"/>
+    <path d="M512 300 L856 472 L512 644 L168 472 Z" fill="none" stroke="#00f3ff" stroke-opacity=".7" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M168 472 L168 524 L512 696 L856 524 L856 472" fill="none" stroke="#00f3ff" stroke-opacity=".22" stroke-width="4" stroke-linejoin="round"/>
+
+    <!-- trunk: Mac -> router, glowing packets -->
+    <path d="M330 472 L660 472" stroke="#00ff41" stroke-opacity=".25" stroke-width="12" stroke-linecap="round"/>
+    <path d="M330 472 L660 472" stroke="#00ff41" stroke-width="12" stroke-linecap="round" stroke-dasharray="4 34" filter="url(#softglow)"/>
+
+    <!-- laptop (This Mac) -->
+    <g stroke="#00f3ff" stroke-width="5" stroke-linejoin="round">
+      <path d="M262 474 L318 446 L374 474 L318 502 Z" fill="#2a3446"/>
+      <path d="M262 474 L318 502 L318 512 L262 484 Z" fill="#1b222e" stroke-width="3"/>
+      <path d="M262 420 L318 392 L318 446 L262 474 Z" fill="#00f3ff" fill-opacity=".22"/>
+    </g>
+
+    <!-- router -->
+    <g stroke="#00f3ff" stroke-width="4" stroke-linejoin="round">
+      <path d="M680 446 L680 410" stroke-width="6" stroke-linecap="round"/>
+      <path d="M736 446 L736 410" stroke-width="6" stroke-linecap="round"/>
+      <path d="M660 456 L708 432 L756 456 L708 480 Z" fill="#2a3446"/>
+      <path d="M660 456 L708 480 L708 498 L660 474 Z" fill="#1b222e" stroke-width="3"/>
+      <path d="M756 456 L708 480 L708 498 L756 474 Z" fill="#121720" stroke-width="3"/>
+    </g>
+    <circle cx="676" cy="474" r="5" fill="#00ff41" filter="url(#softglow)"/>
+    <circle cx="690" cy="481" r="5" fill="#00ff41" filter="url(#softglow)"/>
+
+    <!-- red link up to the flagged server -->
+    <path d="M716 430 C760 380 760 300 800 262" fill="none" stroke="#ff003c" stroke-opacity=".3" stroke-width="16" stroke-linecap="round"/>
+    <path d="M716 430 C760 380 760 300 800 262" fill="none" stroke="#ff3b62" stroke-width="12" stroke-linecap="round" stroke-dasharray="6 26" filter="url(#glow)"/>
+
+    <!-- flagged server, floating -->
+    <ellipse cx="808" cy="250" rx="140" ry="72" fill="url(#redglow)"/>
+    <ellipse cx="808" cy="232" rx="96" ry="48" fill="none" stroke="#ff003c" stroke-opacity=".55" stroke-width="4"/>
+    <ellipse cx="808" cy="232" rx="132" ry="66" fill="none" stroke="#ff003c" stroke-opacity=".25" stroke-width="3"/>
+    <g filter="url(#softglow)" stroke="#ff003c" stroke-width="4" stroke-linejoin="round">
+      <path d="M760 248 L808 272 L808 292 L760 268 Z" fill="#2a0d16"/>
+      <path d="M856 248 L808 272 L808 292 L856 268 Z" fill="#1a0a10"/>
+      <path d="M760 248 L808 224 L856 248 L808 272 Z" fill="#4a1525"/>
+      <path d="M760 214 L808 238 L808 258 L760 234 Z" fill="#2a0d16"/>
+      <path d="M856 214 L808 238 L808 258 L856 234 Z" fill="#1a0a10"/>
+      <path d="M760 214 L808 190 L856 214 L808 238 Z" fill="#4a1525"/>
+    </g>
+    <circle cx="772" cy="262" r="4" fill="#ff8aa3"/><circle cx="772" cy="228" r="4" fill="#ff8aa3"/>
+    </g>
+  </g>
+
+  <!-- HUD corner brackets -->
+  <g stroke="#00f3ff" stroke-width="10" stroke-linecap="round" fill="none" stroke-opacity=".75">
+    <path d="M150 230 V150 H230"/>
+    <path d="M794 150 H874 V230"/>
+    <path d="M150 794 V874 H230"/>
+    <path d="M874 794 V874 H794"/>
+  </g>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="none" stroke="#232a36" stroke-width="6"/>
+</svg>

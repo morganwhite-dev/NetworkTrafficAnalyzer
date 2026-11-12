@@ -90,6 +90,18 @@ Here's why `sudo` is reasonably safe here: the app only needs root to _open_ the
 
 Either way, the link printed in your terminal contains a one-time token. The dashboard won't open without it, which keeps other websites and other users on your Mac from reading your traffic through `localhost`.
 
+### Open it like a normal Mac app
+
+Typing a command every time gets old, so there's a real app too:
+
+```bash
+scripts/install_app.sh
+```
+
+That puts **Network Traffic Analyzer** (with its own icon) in `~/Applications`. Open it from Spotlight (`Cmd+Space`, type "Network Traffic") or drag it into your Dock. It starts the analyzer, opens the dashboard and begins capturing on Wi-Fi right away. Clicking it again while it's running brings the dashboard back, and **Quit** from the Dock stops everything. The first time, macOS may ask to let it access your Desktop folder if that's where the project lives.
+
+Live capture from the app needs ChmodBPF (Option 1 above). Logs go to `~/Library/Logs/NetworkTrafficAnalyzer.log`, and `scripts/install_app.sh --remove` deletes the app.
+
 ### Handy flags
 
 | Flag                         | Does                                                                        |
@@ -99,6 +111,7 @@ Either way, the link printed in your terminal contains a one-time token. The das
 | `--geo off` / `--geo ip-api` | turn the map off, or use the online lookup (sends public IPs to ip-api.com) |
 | `--port 8000`                | dashboard port                                                              |
 | `--wifi-target 1.1.1.1` | what the Wi-Fi check pings to time the internet |
+| `--open` / `--start` | open the dashboard in your browser / start live capture right away |
 
 ## Docker (optional)
 
@@ -164,6 +177,7 @@ NetworkTrafficAnalyzer/
 ├── frontend/             dashboard: index.html, css/, js/, vendored libraries
 ├── frontend/tests/       Node tests for the filter language and network layout
 ├── samples/demo.pcap     90 s of synthetic traffic for the demo
+├── assets/               app icon (SVG source and .icns)
 ├── scripts/              setup, run, Geo-IP download, demo builder, screenshots, vendoring
 ├── docs/                 architecture, detections, filters, design, troubleshooting, screenshots
 ├── Dockerfile

@@ -33,6 +33,10 @@ def parse_args(argv: list[str] | None = None) -> Settings:
     p.add_argument("--wifi-target", default=os.environ.get("NTA_WIFI_TARGET", "1.1.1.1"),
                    help="address the Wi-Fi check pings for internet response time "
                         "(only while the Wi-Fi tab is open)")
+    p.add_argument("--open", action="store_true", dest="open_browser",
+                   help="open the dashboard in your browser once the server is ready")
+    p.add_argument("--start", action="store_true", dest="autostart",
+                   help="start live capture right away")
     p.add_argument("--allow-remote", action="store_true", default=s.allow_remote,
                    help="allow binding to a non-loopback address (containers only)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -41,7 +45,20 @@ def parse_args(argv: list[str] | None = None) -> Settings:
     s.host, s.port, s.geo, s.geo_db = a.host, a.port, a.geo, a.geo_db
     s.promisc, s.allow_remote = a.promisc, a.allow_remote
     s.wifi_target = a.wifi_target
+    s.open_browser, s.autostart = a.open_browser, a.autostart
     return s
+
+
+def write_session_file(data_dir: Path, url: str, port: int) -> None:
+    """Save the dashboard link (mode 0600) so the Mac app can reopen a running session."""
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path = data_dir / f"session-{port}.url"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(url + "\n")
+    except OSError:
+        pass
 
 
 def is_loopback(host: str) -> bool:
@@ -131,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
     app = create_app(rt)
     shown_host = "localhost" if s.host in ("127.0.0.1", "::1", "0.0.0.0") else s.host  # noqa: S104
     url = f"http://{shown_host}:{s.public_port or s.port}/?t={s.token}"
+    rt.launch_url = url
+    write_session_file(s.data_dir, url, s.port)
     ok, hint = capture_access()
     print(f"\n  {GREEN}Network Traffic Analyzer {__version__}{RESET}")
     print(f"  Open {CYAN}{url}{RESET}")

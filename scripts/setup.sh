@@ -38,4 +38,7 @@ Live capture on your Wi-Fi (en0) needs access to /dev/bpf*:
   scripts/run.sh
 or, without ChmodBPF:
   sudo scripts/run.sh
+
+Want a Dock icon instead of typing a command?
+  scripts/install_app.sh
 MSG

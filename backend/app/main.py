@@ -7,6 +7,7 @@ import contextlib
 import shutil
 import tempfile
 import time
+import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,7 @@ class Runtime:
     replay_name: str = ""
     replayer: Replayer | None = None
     wifi: WifiMonitor | None = None
+    launch_url: str | None = None
     upload_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     workdir: Path = field(default_factory=lambda: Path(tempfile.mkdtemp(prefix="nta-")))
 
@@ -90,6 +92,11 @@ def create_app(rt: Runtime) -> FastAPI:
             rt.wifi.start()
         if rt.replay_file:
             start_replay(rt)
+        elif rt.settings.autostart:
+            await autostart_capture(rt)
+        if rt.settings.open_browser and rt.launch_url:
+            asyncio.get_running_loop().call_later(
+                0.6, lambda: webbrowser.open(rt.launch_url))  # type: ignore[arg-type]
         try:
             yield
         finally:
@@ -276,6 +283,22 @@ async def _json(request: Request) -> dict[str, Any]:
         if isinstance(data, dict):
             return data
     return {}
+
+
+async def autostart_capture(rt: Runtime) -> None:
+    """Start live capture at launch (used by the Mac app). Never fatal."""
+    iface = rt.live.iface or rt.settings.iface
+    if not iface:
+        return
+    ok, _ = capture_access()
+    if not ok and iface not in rt.live.preopened:
+        return
+    try:
+        await asyncio.to_thread(rt.live.start, iface)
+    except Exception as exc:  # noqa: BLE001 - the dashboard shows the error instead
+        rt.live.error = clean(str(exc), 200)
+        return
+    rt.pipeline.mode, rt.pipeline.source = "live", iface
 
 
 def start_replay(rt: Runtime) -> None:
