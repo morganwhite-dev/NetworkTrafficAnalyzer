@@ -67,8 +67,8 @@ const table = new PacketTable({
 const charts = new Charts({
   bwCanvas: $("bw-chart"),
   bwStat: $("bw-stat"),
-  protoCanvas: $("proto-chart"),
-  protoTable: $("proto-table"),
+  protoBar: $("proto-bar"),
+  protoLegend: $("proto-legend"),
   protoTotal: $("proto-total"),
 });
 const geomap = new GeoMap({
@@ -82,12 +82,63 @@ const alerts = new AlertsFeed({
   root: $("alerts"),
   stat: $("alerts-stat"),
   onFocus: (ip) => focusHost(ip),
+  labelFor: (ip) => net.nameFor(ip),
 });
 const wifi = new WifiView({ root: $("wifiview"), stat: $("nv-stat") });
 const net = new NetView({
   root: $("netview"),
   stat: $("nv-stat"),
   onSelect: (ip) => focusHost(ip),
+});
+
+// ------------------------------------------------------------------ drawer
+// Packets and the inspector live in a drawer pinned to the bottom of the window. It opens by
+// itself whenever you pick something to look at (a device, an alert, a quick filter).
+const drawerBody = $("drawer-body");
+function setDrawer(open) {
+  $("panel-packets").dataset.open = String(open);
+  drawerBody.hidden = !open;
+  $("drawer-toggle").setAttribute("aria-expanded", String(open));
+  $("drawer-hint").textContent = open ? "Close" : "Open";
+  if (open) {
+    table.schedule();
+    requestAnimationFrame(() => table.follow && table.toBottom(true));
+  }
+}
+$("drawer-toggle").addEventListener("click", () => setDrawer(drawerBody.hidden));
+table.onStat = (text) => {
+  $("drawer-stat").textContent = text;
+};
+
+// ------------------------------------------------------------------ more menu
+const moreBtn = $("btn-more");
+const moreList = $("more-list");
+function setMenu(open) {
+  moreList.hidden = !open;
+  moreBtn.setAttribute("aria-expanded", String(open));
+  if (open) moreList.querySelector(".menu__item")?.focus();
+}
+moreBtn.addEventListener("click", (ev) => {
+  ev.stopPropagation();
+  setMenu(moreList.hidden);
+});
+moreList.addEventListener("click", () => setMenu(false));
+document.addEventListener("click", (ev) => {
+  if (!moreList.hidden && !ev.target.closest("#more-menu")) setMenu(false);
+});
+moreList.addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+  ev.preventDefault();
+  const items = [...moreList.querySelectorAll(".menu__item")];
+  const at = items.indexOf(document.activeElement);
+  const next = ev.key === "ArrowDown" ? at + 1 : at - 1;
+  items[(next + items.length) % items.length].focus();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !moreList.hidden) {
+    setMenu(false);
+    moreBtn.focus();
+  }
 });
 
 // ------------------------------------------------------------------ filter
@@ -104,6 +155,8 @@ function applyFilter(text) {
     filterInput.classList.remove("is-error");
     table.setFilter(pred);
     renderChip(text.trim());
+    $("drawer-filter").textContent = text.trim() ? `FILTER · ${text.trim()}` : "";
+    if (text.trim()) setDrawer(true);
   } catch (e) {
     if (!(e instanceof FilterError)) throw e;
     err.textContent = e.message;
@@ -153,16 +206,6 @@ function focusHost(ip) {
   applyFilter(`ip == ${ip}`);
   net.select(ip);
   geomap.select(ip);
-  // The packet list is far below the map: say what just happened and offer a jump.
-  const panel = $("panel-packets");
-  if (panel.getBoundingClientRect().top > window.innerHeight * 0.7) {
-    for (const old of document.querySelectorAll(".focus-toast")) old.remove();
-    toast(`Showing packets for ${net.nameFor(ip)}.`, "info", 6000, {
-      label: "Jump to packets",
-      cls: "focus-toast",
-      run: () => panel.scrollIntoView({ behavior: "smooth", block: "start" }),
-    });
-  }
 }
 
 // ------------------------------------------------------------------ status
@@ -261,7 +304,7 @@ function renderEmptyMap() {
   const s = state.status;
   const box = $("nv-empty");
   if (!s) return;
-  const show = s.mode === "idle" && state.tab !== "wifi";
+  const show = s.mode === "idle" && (state.tab === "map" || state.tab === "flows");
   box.hidden = !show;
   if (!show) return;
   $("nv-empty-text").replaceChildren(
@@ -567,6 +610,7 @@ renderMute();
 const TABS = [
   ["tab-map", "map"],
   ["tab-flows", "flows"],
+  ["tab-world", "world"],
   ["tab-wifi", "wifi"],
 ];
 state.tab = "map";
@@ -574,8 +618,13 @@ function setTab(tab) {
   state.tab = tab;
   for (const [id, name] of TABS) $(id).setAttribute("aria-selected", name === tab ? "true" : "false");
   const isWifi = tab === "wifi";
-  $("netview").hidden = isWifi;
+  const isWorld = tab === "world";
+  $("netview").hidden = isWifi || isWorld;
+  $("worldview").hidden = !isWorld;
   $("wifiview").hidden = !isWifi;
+  $("nv-stat").hidden = isWorld;
+  $("geo-stat").hidden = !isWorld;
+  if (isWorld) requestAnimationFrame(() => geomap.map.invalidateSize());
   net.setTab(tab);
   renderEmptyMap();
   if (isWifi) {
@@ -595,6 +644,7 @@ setInterval(() => {
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "/" && document.activeElement !== filterInput) {
     ev.preventDefault();
+    setDrawer(true);
     filterInput.focus();
   }
 });

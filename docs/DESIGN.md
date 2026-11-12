@@ -4,7 +4,7 @@ The dashboard mixes three looks, and each one has exactly one job:
 
 - **Isometric 3D is for objects.** Devices on the Network map are small isometric models.
 - **HUD is for notes on the scene.** Corner brackets frame the thing in focus; notched corners mark a problem.
-- **Console style is for anything you read.** Tables, numbers, the incident card and the alerts feed are plain, dense and typographic.
+- **Console style is for anything you read.** Tables, numbers and the alerts feed (including their expanded details) are plain, dense and typographic.
 
 Keeping those jobs separate is what makes it look designed instead of pieced together.
 
@@ -36,7 +36,7 @@ Only three things glow (6px blur at most, one shared SVG filter): moving packets
 ## HUD rules
 
 - Corner brackets mean "focus frame": only on the Network panel and the hover card.
-- Notched corners mean "problem": only on red/amber callout tags, the incident card and the "jump to live" pill.
+- Notched corners mean "problem": only on red/amber callout tags and the "jump to live" pill.
 - Never on the table, charts, buttons, inputs or healthy nodes. No hex nodes, scanlines, matrix rain or fake telemetry. Every label is real data.
 
 ## Network view: Map tab
@@ -48,16 +48,7 @@ Only three things glow (6px blur at most, one shared SVG filter): moving packets
 - **Devices** are built from `box()` calls: a laptop (base and lid), a router (body, two antennas, three lights), a phone, a TV (stand and panel), a server stack (three layers with lights) and an unknown cube.
 - **Cables:** LAN cables lie on the floor along the grid with one L-shaped turn; internet links are curves through the air. Width is 1–4px on a log scale of bytes/s. Packets are 3px dashes whose gap shrinks and speed rises with throughput; links under 1 KB/s are still and faded.
 - **Flagged nodes:** red faces with a red top edge, a breathing red ellipse on the floor, and (for the two most severe) an elbow callout to a notched tag such as `PORT SCAN / 214 ports in 10 s`. Other flagged nodes only get the red treatment.
-- **Incident card:** top-left of the map, 296px, notched, with a 2px severity bar:
-
-  ```
-  [HIGH]  BANDWIDTH HOG                        1/2  ›
-  93.184.215.14 · cdn.example.net · US
-  38.2 MB/s     74% of traffic     +410% vs 60 s avg
-  since 14:02:11 (42 s) · click to filter
-  ```
-
-  With no incidents it collapses to `No active incidents · watching 14 hosts`.
+- **Incidents:** the map itself carries only the red node and its callout tag (`PORT SCAN · Living-Room-TV`, with the device's name so two scans can be told apart). There is no card over the map: the numbers (`38.2 MB/s · 74% of traffic · +410% vs normal`), what it means and what to do live in the **alert row**. A new high or critical alert opens its own row; the next one closes it again. Callout tags avoid other devices, their labels and the internet column.
 
 - **Hover:** unrelated items fade to 30%, the path from This Mac turns cyan, and a bracketed hover card shows name, IP, kind, country, MB/s in/out, share, packets, first seen and a 60 s sparkline. **Selected** nodes get a cyan targeting diamond on the floor. Clicking filters the packet table to `ip == X`.
 
@@ -90,3 +81,12 @@ Charts, numbers, panels, idle edges and healthy nodes stay still. Under `prefers
 ## Anti-patterns
 
 Glow on text or borders; rounded 12–16px cards, glassmorphism or blur; legends made of coloured dots; icons inside circles; isometric lines at any angle other than 26.57°, horizontal or vertical; several things pulsing at once; rainbow edges or particles on idle links; matrix rain, scanlines or fake telemetry; large blocks of pure green text; default Leaflet and Chart.js chrome; numbers whose decimals jump between updates (always 3 significant figures); rows that reorder every second.
+
+## Page layout
+
+One screen holds everything you need day to day:
+
+- **Row 1:** Network (Map, Flows, World, Wi-Fi tabs) beside Alerts. The World tab is the Geo-IP map.
+- **Row 2:** one Traffic panel: the bandwidth line, and underneath it a stacked bar and legend for protocol shares (the bar is DOM, not a chart, so it can carry plain-English tooltips).
+- **Bottom:** a Packet details drawer pinned to the window, showing only its title bar and packet count until opened. Picking a device, an alert, a quick filter or pressing `/` opens it, filtered. It overlays the page instead of pushing it, so the map doesn't jump.
+- **Top bar:** Start, the Live | Demo switch, the interface, and a `⋯` menu for Clear, Save capture and Open file. Readouts, mute and the `?` guide sit on the right.

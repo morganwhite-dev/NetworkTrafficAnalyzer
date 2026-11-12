@@ -2,17 +2,7 @@
 // Elements are kept by key and updated in place so the packet dashes and the
 // breathing red glow don't restart every second.
 
-import {
-  ago,
-  clock,
-  el,
-  fmtPct,
-  fmtRate,
-  icon,
-  svg,
-  truncate,
-} from "./format.js";
-import { alertInfo } from "./glossary.js";
+import { ago, el, fmtPct, fmtRate, svg, truncate } from "./format.js";
 import { device, footprintDiamond, slab } from "./iso.js";
 import {
   airPath,
@@ -55,10 +45,8 @@ export class NetView {
     this.hoverKey = null;
     this.rank = new RankHold(3);
     this.lanRank = new RankHold(3);
-    this.incidentIdx = 0;
     this.knownIncidents = new Set();
     this.calloutSeen = new Set();
-    this.incSeen = new Map();
     this.nodes = new Map();
     this.edges = new Map();
     this.flowItems = new Map();
@@ -91,17 +79,15 @@ export class NetView {
       this.calloutsG,
     );
     this.svg.append(this.floorG, this.mapG, this.flowsG, this.sweepRect);
-    this.incident = el("div", { class: "incident hud-notch is-quiet" });
     this.hovercard = el("div", {
       class: "hovercard hud-brackets",
       "aria-hidden": "true",
     });
-    root.append(this.svg, this.incident, this.hovercard);
+    root.append(this.svg, this.hovercard);
 
     this.svg.addEventListener("mouseover", (ev) => this.onHover(ev));
     this.svg.addEventListener("mouseleave", () => this.setHover(null));
     this.svg.addEventListener("click", (ev) => this.onClick(ev));
-    this.incident.addEventListener("click", (ev) => this.onIncidentClick(ev));
     new ResizeObserver(() => this.resize()).observe(root);
     this.resize();
   }
@@ -302,7 +288,7 @@ export class NetView {
       t,
     );
     this.render();
-    this.renderIncident();
+    this.trackIncidents();
     this.renderStat();
   }
 
@@ -324,7 +310,6 @@ export class NetView {
       "display",
       this.tab === "flows" ? "inline" : "none",
     );
-    this.incident.hidden = this.tab !== "map";
     if (!this.view) return;
     if (this.tab === "map") this.renderMap();
     else this.renderFlows();
@@ -717,19 +702,9 @@ export class NetView {
     return h?.name && h.name !== ip ? h.name : ip;
   }
 
-  /** Rectangles the callout tags must stay clear of (incident card, internet column). */
+  /** Rectangles the callout tags must stay clear of (the internet column). */
   obstacles() {
-    const out = [];
-    if (!this.incident.hidden) {
-      out.push([
-        this.incident.offsetLeft - 6,
-        this.incident.offsetTop - 6,
-        this.incident.offsetWidth + 12,
-        this.incident.offsetHeight + 12,
-      ]);
-    }
-    out.push([this.colX - 30, 0, this.W - this.colX + 30, this.H]);
-    return out;
+    return [[this.colX - 30, 0, this.W - this.colX + 30, this.H]];
   }
 
   callout(it, placed) {
@@ -1062,120 +1037,20 @@ export class NetView {
   }
 
   // -------------------------------------------------------------- incidents
-  renderIncident() {
-    const v = this.view;
-    const list = v.incidents || [];
+  /**
+   * A new incident gets the scan sweep. Its numbers and explanation live in the alert row,
+   * and the map keeps only the red node and the callout tag, so nothing covers a device.
+   */
+  trackIncidents() {
+    const list = this.view.incidents || [];
     const fresh = list.filter((i) => !this.knownIncidents.has(i.id));
     for (const i of list) this.knownIncidents.add(i.id);
-    if (!list.length) {
-      this.incident.className = "incident is-quiet";
-      this.incident.replaceChildren(
-        el("span", {
-          text: `No active incidents · watching ${v.counts?.hosts ?? 0} hosts`,
-        }),
-      );
-      return;
-    }
-    if (fresh.length && this.knownIncidents.size > list.length - fresh.length) {
-      this.incidentIdx = list.indexOf(fresh[0]);
-      if (this.tab === "map") this.sweep();
-    }
-    this.incidentIdx = Math.min(this.incidentIdx, list.length - 1);
-    const inc = list[this.incidentIdx];
-    const h = inc.host || {};
-    const sev = sevClass(inc.severity) || "high";
-    // Show the whole card when an incident first appears, then shrink it to its headline so it
-    // stops covering the map. Hovering the card brings the details back.
-    if (!this.incSeen.has(inc.id)) this.incSeen.set(inc.id, Date.now());
-    const compact = !fresh.length && Date.now() - this.incSeen.get(inc.id) > 6000;
-    this.incident.className = `incident hud-notch sev-${sev === "high" ? "high" : "medium"}${compact ? " is-compact" : ""}${fresh.length ? " flash" : ""}`;
-    const nums = [];
-    const liveShare =
-      v.total_bps > 0 && h.bps != null ? h.bps / v.total_bps : null;
-    if (inc.kind === "bandwidth_hog" && inc.detail) {
-      nums.push(["red", fmtRate(h.bps ?? inc.detail.bps), "now"]);
-      nums.push(["", fmtPct(liveShare ?? inc.detail.share), "of traffic"]);
-      if (inc.detail.vs_normal != null)
-        nums.push(["", `+${Math.round(inc.detail.vs_normal)}%`, "vs normal"]);
-    } else if (inc.kind === "port_scan" && inc.detail) {
-      nums.push(["red", String(inc.detail.ports), "ports probed"]);
-      const target =
-        inc.detail.target === v.self?.ip ? "This Mac" : inc.detail.target || "";
-      nums.push(["", truncate(target, 15), "target"]);
-    } else if (inc.kind === "cleartext_credentials" && inc.detail) {
-      nums.push(["red", truncate(inc.detail.field || "secret", 10), "field"]);
-      nums.push(["", "none", "encryption"]);
-    } else {
-      nums.push(["red", fmtRate(h.bps || 0), "now"]);
-      nums.push(["", String(h.packets ?? "—"), "packets"]);
-    }
-    const hostLine = [h.ip || inc.hosts?.[0], h.name, h.cc]
-      .filter(Boolean)
-      .join(" · ");
-    const age = (v.now || Date.now() / 1000) - inc.ts;
-    const showReason = !["bandwidth_hog", "port_scan"].includes(inc.kind);
-    this.incident.replaceChildren(
-      el(
-        "div",
-        { class: "row1" },
-        el("span", {
-          class: `sev sev-${inc.severity}`,
-          text: inc.severity.toUpperCase(),
-        }),
-        el("span", { class: "ttl", text: inc.title.toUpperCase() }),
-        el(
-          "span",
-          { class: "pager" },
-          el("span", { text: `${this.incidentIdx + 1}/${list.length}` }),
-          list.length > 1
-            ? el(
-                "button",
-                {
-                  type: "button",
-                  "aria-label": "Next incident",
-                  "data-next": "1",
-                },
-                icon("chevron-right"),
-              )
-            : null,
-        ),
-      ),
-      el("div", { class: "host", text: hostLine, title: hostLine }),
-      el(
-        "div",
-        { class: "nums" },
-        ...nums.map(([c, n, l]) =>
-          el(
-            "div",
-            { class: c },
-            el("b", { text: n }),
-            el("span", { text: l }),
-          ),
-        ),
-      ),
-      alertInfo(inc.kind)
-        ? el("div", { class: "means", text: alertInfo(inc.kind).means })
-        : null,
-      el("div", {
-        class: "foot",
-        text: `${showReason ? `${inc.reason} · ` : ""}since ${clock(inc.ts)} (${ago(age)}) · click to filter`,
-      }),
-    );
-    if (fresh.length)
-      setTimeout(() => this.incident.classList.remove("flash"), 700);
-  }
-
-  onIncidentClick(ev) {
-    const list = this.view?.incidents || [];
-    if (!list.length) return;
-    if (ev.target.closest("[data-next]")) {
-      ev.stopPropagation();
-      this.incidentIdx = (this.incidentIdx + 1) % list.length;
-      this.renderIncident();
-      return;
-    }
-    const ip = list[this.incidentIdx]?.hosts?.[0];
-    if (ip) this.onSelect(ip);
+    if (
+      fresh.length &&
+      this.knownIncidents.size > list.length - fresh.length &&
+      this.tab === "map"
+    )
+      this.sweep();
   }
 
   // ------------------------------------------------------------ interaction

@@ -25,10 +25,11 @@ I wanted to see what my Mac is actually doing on the network in real time. Wires
 - **Threat and anomaly alerts** that turn the guilty node red: port scans, host sweeps, passwords sent in cleartext, traffic spikes, bandwidth hogs, ARP/NDP spoofing, DNS tunneling, rogue DHCP servers and routers, and VPN leaks ([what each one means](docs/DETECTIONS.md))
 - **Protocol parsing** for TCP, UDP, ICMP, DNS, mDNS, DHCP, HTTP, TLS (with the server name from the handshake), QUIC and ARP, with timestamps, addresses, ports, lengths and flags
 - **Filter bar** with a small query language: `ip == 192.168.1.10`, `proto == TLS and len > 1000`, `port == 53 || port == 443` ([cheat sheet](docs/FILTERS.md))
-- **Packet inspector** with decoded headers and a Hex/ASCII dump. Bytes are tinted by layer, and passwords are blurred until you click.
-- **Geo-IP world map** that works offline (no API key and no lookups leaving your Mac)
+- **Packet inspector** with a one-line plain summary, decoded headers and a Hex/ASCII dump. Bytes are tinted by layer, and passwords are blurred until you click.
+- **World tab:** a Geo-IP map of where your servers are, working offline (no API key and no lookups leaving your Mac)
 - **Upload a `.pcap` / `.pcapng`** to analyse it, and **export the session** as a `.pcap` for Wireshark
-- **Bandwidth chart** that goes red during a spike, and a **protocol breakdown**
+- **One Traffic panel:** a bandwidth chart that goes red during a spike, with a protocol-share bar underneath (hover a colour for what the protocol means)
+- **Packet details drawer** at the bottom of the window: closed by default, it opens by itself, filtered, when you click a device or an alert
 - **Synthesized sound cues** (Web Audio, no audio files) when capture starts or a high-severity alert fires, with a mute toggle that remembers your choice
 - **Built to be safe to run:** root only for a split second, a per-launch access token, a strict CSP, and hostile-file handling ([details](SECURITY.md))
 
@@ -137,9 +138,10 @@ That profile uses host networking, keeps the dashboard on `127.0.0.1`, and only 
 |                                                                                                     |                                                                                                                               |
 | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | ![Network map](docs/screenshots/netview-map.png) **Map:** your network in 3D. Red means look here.  | ![Hover card](docs/screenshots/netview-hover.png) **Hover a host** for its rate, share, first-seen time and a 60 s sparkline. |
-| ![Flows](docs/screenshots/netview-flows.png) **Flows:** who's using your bandwidth, sized by share. | ![Alerts](docs/screenshots/alerts.png) **Alerts** in plain words, with masked secrets you can reveal.                         |
+| ![Flows](docs/screenshots/netview-flows.png) **Flows:** who's using your bandwidth, sized by share. | ![Alerts](docs/screenshots/alerts.png) **Alerts** in plain words: open one for the numbers, what it means and what to do.                         |
 | ![Filter](docs/screenshots/filter.png) **Filter** to one device and protocol.                       | ![Inspector](docs/screenshots/inspector.png) **Inspector** with decoded layers and a Hex/ASCII dump.                          |
-| ![Wi-Fi check](docs/screenshots/netview-wifi.png) **Wi-Fi check:** one plain answer about why it's slow (demo readings shown). | ![Charts and Geo-IP map](docs/screenshots/charts-geo.png) **Bandwidth, protocols and the world map.** |
+| ![World tab](docs/screenshots/netview-world.png) **World:** where the servers you talk to are. | ![Wi-Fi check](docs/screenshots/netview-wifi.png) **Wi-Fi check:** one plain answer about why it's slow (demo readings shown). |
+| ![Traffic](docs/screenshots/traffic.png) **Traffic:** bandwidth and what kind of traffic it is. | ![Packet details drawer](docs/screenshots/drawer.png) **Packet details** slides up from the bottom when you click a device or alert. |
 
 Every screenshot comes from the bundled demo capture and synthetic Wi-Fi readings, so none of them show a real network. To regenerate them, start the demo with `NTA_TOKEN=demo-screenshots-0123 NTA_WIFI_DEMO=1` (tokens must be at least 16 characters) and run `scripts/capture_screenshots.py`.
 
@@ -227,5 +229,6 @@ Geo-IP data by [DB-IP.com](https://db-ip.com) (CC BY 4.0). World outline from [N
 - [x] Phase 11: clarity pass from a design review: in-app guide, one tooltip system, plain-English alert explainers, friendly names in the packet table, quick filters, readable dim text, compact incident card, collision-aware map callouts
 - [x] Phase 12: fixes from a security review of the switch: a paused demo can't leak a packet into the next source, and only an explicit `replay` ever selects the demo
 - [x] Phase 13: hardening from the same review: headers-only export really is headers only, source switches are serialised and recover from a failed Live start, inspector fields are masked before they are shortened, other local web pages can't borrow the session cookie (`Sec-Fetch-Site`), tokens must be 16+ characters, a DEMO DATA strip and `nta-demo-` export names, the Docker capture profile drops root, refreshed screenshots
+- [x] Phase 14: one-screen layout: Geo-IP became the World tab, Bandwidth and Protocols merged into one Traffic panel, Packets and Inspector moved into a Packet details drawer that opens by itself, the incident card moved into the alert rows, Clear/Save/Open moved under a ⋯ menu, and the world outline no longer draws lines across the map
 
 </details>

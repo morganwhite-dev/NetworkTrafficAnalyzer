@@ -1,3 +1,5 @@
+import { fmtPct, fmtRate } from "./format.js";
+
 // Plain-English text for everything on the dashboard that has jargon in it.
 // One place, so the tooltips, the alert cards and the help panel never disagree.
 
@@ -91,18 +93,50 @@ export const ALERT_INFO = {
 
 export const PANEL_TIPS = {
   network:
-    "Map: your Mac, router and devices on the left, internet servers on the right. Flows: who uses your bandwidth. Wi-Fi: how healthy your connection is.",
+    "Map: your Mac, router and devices on the left, internet servers on the right. Flows: who uses your bandwidth. World: where those servers are. Wi-Fi: how healthy your connection is.",
   alerts:
-    "Things that look wrong, explained in plain words. Click one to see the packets involved.",
-  bandwidth: "How fast data is moving over the last minute. Red means a spike.",
-  protocols:
-    "What kinds of traffic you have, by share of packets (not by size). Hover a name for what it means.",
-  geo: "Where in the world the servers you talk to are. Looked up offline, nothing leaves your Mac.",
+    "Things that look wrong, explained in plain words. Open one with its ? for the numbers and what to do. Click it to see the packets involved.",
+  traffic:
+    "The line is how fast data is moving over the last minute (red means a spike). The bar underneath is what kinds of traffic it is, by share of packets. Hover a colour for what it means.",
   packets:
-    "Every packet captured, like Wireshark. You don't need this day to day. Click a device or alert to filter it here.",
-  inspector:
-    "Click any packet to see it decoded, in plain words, and as raw bytes.",
+    "Every packet captured, like Wireshark. You don't need this day to day. Clicking a device or an alert opens it, filtered.",
+  inspector: "Click any packet to see it decoded, in plain words, and as raw bytes.",
 };
+
+/**
+ * The headline numbers for an alert, shown big at the top of its expanded row:
+ * [{ value, label, red? }]. Built from the alert's `detail`, so they update in place.
+ */
+export function alertNumbers(alert, labelFor = (ip) => ip) {
+  const d = alert.detail || {};
+  const out = [];
+  switch (alert.kind) {
+    case "bandwidth_hog":
+      if (d.bps != null) out.push({ value: fmtRate(d.bps), label: "now", red: true });
+      if (d.share != null) out.push({ value: fmtPct(d.share), label: "of traffic" });
+      if (d.vs_normal != null)
+        out.push({ value: `+${Math.round(d.vs_normal)}%`, label: "vs normal" });
+      break;
+    case "port_scan":
+      if (d.ports != null) out.push({ value: String(d.ports), label: "ports probed", red: true });
+      if (d.target) out.push({ value: labelFor(d.target), label: "target" });
+      break;
+    case "cleartext_credentials":
+      out.push({ value: d.field || "secret", label: "field", red: true });
+      out.push({ value: "none", label: "encryption" });
+      break;
+    case "traffic_spike":
+      if (d.bps != null) out.push({ value: fmtRate(d.bps), label: "now", red: true });
+      if (d.baseline != null) out.push({ value: fmtRate(d.baseline), label: "normal" });
+      break;
+    case "dns_tunnel":
+      if (d.domain) out.push({ value: d.domain, label: "domain", red: true });
+      break;
+    default:
+      break;
+  }
+  return out;
+}
 
 const WHAT = {
   TLS: "encrypted web traffic",

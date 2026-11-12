@@ -12,10 +12,10 @@ test("iso projection is 2:1", () => {
   assert.deepEqual(iso(0, 0, 7), [0, -7]);
 });
 
-test("slab is grid-aligned and leaves room for the incident card", () => {
+test("slab is grid-aligned and leaves room for callout tags above it", () => {
   const g = slabGeometry(930, 424);
   assert.equal(g.S % 24, 0);
-  assert.ok(g.oy >= 120);
+  assert.ok(g.oy >= 80);
   assert.ok(g.rightEdge < 930);
 });
 
@@ -77,7 +77,7 @@ test("column rows stay inside the panel", () => {
 test("slab labels fit the gap between neighbours in a row", () => {
   for (const S of [150, 240, 336, 384, 480]) {
     const { name, sub } = slabLabelChars(S);
-    const gap = 0.46 * S; // LAN_SLOTS neighbours sit 0.23 of the slab width apart
+    const gap = 0.4 * S; // LAN_SLOTS neighbours sit 0.2 of the slab width apart
     assert.ok(sub * 6.6 <= Math.max(gap, 60 + 12), `sub fits at S=${S}`);
     assert.ok(name >= 8 && sub >= 8 && name <= 18 && sub <= 30);
   }

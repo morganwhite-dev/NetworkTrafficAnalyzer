@@ -12,10 +12,10 @@ export function iso(x, y, z = 0) {
 
 /** Slab size and screen offset for a panel of W×H pixels. */
 export function slabGeometry(W, H) {
-  const raw = Math.max(150, Math.min(0.29 * W, H - 150));
+  const raw = Math.max(150, Math.min(0.29 * W, H - 90));
   const S = Math.floor(raw / 24) * 24; // whole grid cells, so the slab sits on the floor grid
   const ox = S + 24; // screen x of the world origin (slab's top corner)
-  const oy = Math.max(120, H - S - 40); // screen y of the slab's top surface; room for the incident card
+  const oy = Math.max(80, H - S - 40); // screen y of the slab's top surface; room for callout tags above
   const wy = oy + SLAB_Z; // screen y of the world origin on the floor (z = 0)
   return { S, ox, oy, wy, rightEdge: 24 + 2 * S };
 }
@@ -38,17 +38,17 @@ export function slabPoint(fx, fy, geom) {
 }
 
 // Two screen-horizontal rows parallel to the Mac-to-router line (one behind it,
-// one in front), about 0.46·S apart so labels never touch.
+// one in front), about 0.4·S apart so labels never touch.
 // Busiest first: middle back, middle front, then the sides.
 export const LAN_SLOTS = [
   [0.5, 0.25],
   [0.5, 0.75],
-  [0.27, 0.25],
-  [0.73, 0.75],
-  [0.73, 0.25],
-  [0.27, 0.75],
+  [0.3, 0.25],
+  [0.7, 0.75],
+  [0.7, 0.25],
+  [0.3, 0.75],
 ];
-export const SELF_SLOT = [0.15, 0.5];
+export const SELF_SLOT = [0.13, 0.5];
 export const GATEWAY_SLOT = [0.86, 0.5];
 
 /** Edge look from throughput. */
@@ -75,12 +75,12 @@ export function clamp(v, lo, hi) {
 
 /**
  * How many characters a label under a device on the slab may use. Neighbours in
- * a row are 0.46·S apart on screen (see LAN_SLOTS), so the budget follows the
+ * a row are 0.4·S apart on screen (see LAN_SLOTS), so the budget follows the
  * slab size: IPv6 addresses and long host names stop short of the next label.
  * Character widths are for the 12px name and 10px sub-line monospace, rounded up.
  */
 export function slabLabelChars(S) {
-  const px = Math.max(60, Math.floor(0.46 * S) - 12);
+  const px = Math.max(60, Math.floor(0.4 * S) - 12);
   return {
     name: clamp(Math.floor(px / 7.8), 8, 18),
     sub: clamp(Math.floor(px / 6.6), 8, 30),

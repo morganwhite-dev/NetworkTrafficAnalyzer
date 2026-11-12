@@ -2,15 +2,17 @@
 
 import { post } from "./api.js";
 import { clock, el, icon } from "./format.js";
-import { alertInfo, SEVERITY_TIPS } from "./glossary.js";
+import { alertInfo, alertNumbers, SEVERITY_TIPS } from "./glossary.js";
 
 const RED = new Set(["high", "critical"]);
 
 export class AlertsFeed {
-  constructor({ root, stat, onFocus }) {
+  constructor({ root, stat, onFocus, labelFor }) {
     this.root = root;
     this.stat = stat;
     this.onFocus = onFocus;
+    this.labelFor = labelFor || ((ip) => ip);
+    this.auto = null; // the alert we opened ourselves: the next serious one replaces it
     this.items = [];
     this.open = new Set(); // alert ids whose explanation is expanded: survives in-place updates
     this.render();
@@ -22,6 +24,19 @@ export class AlertsFeed {
   }
 
   add(alert) {
+    // A new serious alert opens its own details (the numbers and what to do), and closes the
+    // previous one we opened, so the panel never fills up with expanded rows.
+    if (RED.has(alert.severity)) {
+      const prevId = this.auto;
+      if (prevId !== null) {
+        this.open.delete(prevId);
+        const prev = this.items.find((a) => a.id === prevId);
+        const old = this.root.querySelector(`.alert-row[data-id="${prevId}"]`);
+        if (old && prev) old.replaceWith(this.row(prev, false));
+      }
+      this.open.add(alert.id);
+      this.auto = alert.id;
+    }
     this.items.unshift(alert);
     if (this.items.length > 200) this.items.length = 200;
     this.root.prepend(this.row(alert));
@@ -104,10 +119,25 @@ export class AlertsFeed {
       el("div", { class: "why", text: a.reason, title: a.reason }),
     );
     const info = alertInfo(a.kind);
+    const numbers = alertNumbers(a, this.labelFor);
     if (info) {
       const explain = el(
         "div",
         { class: "explain", hidden: !this.open.has(a.id) },
+        numbers.length
+          ? el(
+              "div",
+              { class: "nums" },
+              ...numbers.map((n) =>
+                el(
+                  "div",
+                  { class: n.red ? "red" : "" },
+                  el("b", { text: n.value }),
+                  el("span", { text: n.label }),
+                ),
+              ),
+            )
+          : null,
         el("b", { text: "What it means" }),
         el("span", { text: info.means }),
         el("b", { text: "What to do" }),
@@ -118,7 +148,7 @@ export class AlertsFeed {
         type: "button",
         "aria-expanded": String(this.open.has(a.id)),
         "aria-label": `What does ${a.title} mean?`,
-        "data-tip": "What does this mean?",
+        "data-tip": "Details: the numbers, what it means and what to do",
         text: "?",
       });
       btn.addEventListener("click", (ev) => {
@@ -127,6 +157,7 @@ export class AlertsFeed {
         explain.hidden = !open;
         if (open) this.open.add(a.id);
         else this.open.delete(a.id);
+        if (this.auto === a.id) this.auto = null; // you took over: leave it as you set it
         btn.setAttribute("aria-expanded", String(open));
       });
       btn.addEventListener("keydown", (ev) => ev.stopPropagation());

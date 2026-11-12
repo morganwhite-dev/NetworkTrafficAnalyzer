@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  ALERT_INFO, alertInfo, PANEL_TIPS, plainSummary, PROTO_TIPS, protoTip, SEVERITY_TIPS,
+  ALERT_INFO, alertInfo, alertNumbers, PANEL_TIPS, plainSummary, PROTO_TIPS, protoTip, SEVERITY_TIPS,
 } from "../js/glossary.js";
 
 // Every `kind` the detectors can raise (backend/app/detectors.py).
@@ -30,7 +30,7 @@ test("every protocol the donut can show has a plain-English tip", () => {
 
 test("every severity and panel has help text", () => {
   for (const s of ["critical", "high", "medium", "low", "info"]) assert.ok(SEVERITY_TIPS[s], s);
-  for (const p of ["network", "alerts", "bandwidth", "protocols", "geo", "packets", "inspector"]) {
+  for (const p of ["network", "alerts", "traffic", "packets", "inspector"]) {
     assert.ok(PANEL_TIPS[p], p);
   }
 });
@@ -43,4 +43,21 @@ test("plain summary names the endpoints and the kind of traffic", () => {
     plainSummary({ proto: "XYZ", src: "a", dst: "b" }),
     "a sent XYZ traffic to b.",
   );
+});
+
+test("alert numbers come from the alert's own detail", () => {
+  const name = (ip) => (ip === "10.0.0.2" ? "This Mac" : ip);
+  const hog = alertNumbers(
+    { kind: "bandwidth_hog", detail: { bps: 5_890_000, share: 0.91, vs_normal: 1142 } },
+  );
+  assert.deepEqual(hog.map((n) => n.label), ["now", "of traffic", "vs normal"]);
+  assert.equal(hog[0].value, "5.89 MB/s");
+  assert.equal(hog[1].value, "91%");
+  assert.equal(hog[2].value, "+1142%");
+  const scan = alertNumbers({ kind: "port_scan", detail: { ports: 214, target: "10.0.0.2" } }, name);
+  assert.deepEqual(scan.map((n) => n.value), ["214", "This Mac"]);
+  const creds = alertNumbers({ kind: "cleartext_credentials", detail: { field: "password" } });
+  assert.deepEqual(creds.map((n) => n.value), ["password", "none"]);
+  assert.deepEqual(alertNumbers({ kind: "mac_change", detail: {} }), []);
+  assert.deepEqual(alertNumbers({ kind: "bandwidth_hog" }), []);
 });

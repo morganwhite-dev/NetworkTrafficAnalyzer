@@ -30,22 +30,25 @@
         <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-player-play"></use></svg>
         <span>Start</span>
       </button>
-      <button class="btn" id="btn-clear" type="button" data-tip="Clear everything captured so far">
-        <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-trash"></use></svg>
-        <span>Clear</span>
-      </button>
-      <button class="btn" id="btn-export" type="button" data-tip="Save this session as a .pcap file you can open in Wireshark">
-        <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-download"></use></svg>
-        <span>Save capture</span>
-      </button>
-      <button class="btn" id="btn-upload" type="button" data-tip="Analyse a saved .pcap or .pcapng capture file instead of live traffic">
-        <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-upload"></use></svg>
-        <span>Open file</span>
-      </button>
-      <input type="file" id="file-input" accept=".pcap,.pcapng,.cap" class="sr-only" tabindex="-1">
       <span class="sep"></span>
       <label class="sr-only" for="iface-select">Interface</label>
       <select class="select" id="iface-select" data-tip="Which network connection to watch. en0 is usually Wi-Fi."></select>
+      <div class="menu" id="more-menu">
+        <button class="btn btn-icon" id="btn-more" type="button" aria-haspopup="menu" aria-expanded="false"
+                aria-controls="more-list" aria-label="More actions" data-tip="More: clear, save a capture, open a capture file">&#8943;</button>
+        <div class="menu__list" id="more-list" role="menu" aria-label="More actions" hidden>
+          <button class="menu__item" id="btn-clear" type="button" role="menuitem" data-tip="Clear everything captured so far">
+            <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-trash"></use></svg><span>Clear capture</span>
+          </button>
+          <button class="menu__item" id="btn-export" type="button" role="menuitem" data-tip="Save this session as a .pcap file you can open in Wireshark">
+            <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-download"></use></svg><span>Save capture&hellip;</span>
+          </button>
+          <button class="menu__item" id="btn-upload" type="button" role="menuitem" data-tip="Analyse a saved .pcap or .pcapng capture file instead of live traffic">
+            <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-upload"></use></svg><span>Open file&hellip;</span>
+          </button>
+        </div>
+      </div>
+      <input type="file" id="file-input" accept=".pcap,.pcapng,.cap" class="sr-only" tabindex="-1">
     </div>
 
     <div class="flex items-center gap-4 ml-auto">
@@ -79,15 +82,17 @@
 
   <main class="p-4 grid gap-3">
     <section class="grid gap-3 grid-cols-12" aria-label="Network">
-      <article class="panel hud-brackets col-span-12 xl:col-span-8 h-[500px]" id="panel-network">
+      <article class="panel hud-brackets col-span-12 xl:col-span-8" id="panel-network">
         <header class="panel__head">
           <span class="idx">01 /</span><span class="title">Network</span><span class="help" data-help="network" tabindex="0" role="note" aria-label="About this panel">?</span>
           <div class="tabs" role="tablist" aria-label="Network view">
             <button class="tab" role="tab" id="tab-map" aria-selected="true" aria-controls="netview" data-tip="Map: your devices, your router and the internet servers you talk to">Map</button>
             <button class="tab" role="tab" id="tab-flows" aria-selected="false" aria-controls="netview" data-tip="Flows: who is using your bandwidth, biggest first">Flows</button>
+            <button class="tab" role="tab" id="tab-world" aria-selected="false" aria-controls="worldview" data-tip="World: where in the world the servers you talk to are">World</button>
             <button class="tab" role="tab" id="tab-wifi" aria-selected="false" aria-controls="wifiview" data-tip="Wi-Fi: signal strength and how fast your router and the internet answer">Wi-Fi</button>
           </div>
           <span class="stat" id="nv-stat"></span>
+          <span class="stat" id="geo-stat" hidden></span>
         </header>
         <div class="panel__body">
           <div class="netview" id="netview" role="tabpanel" aria-label="Network map"></div>
@@ -95,11 +100,14 @@
             <div class="nv-empty__title">Nothing to show yet</div>
             <div id="nv-empty-text">Press <b>Start</b> to watch this Mac, or try <b>Demo</b>.</div>
           </div>
+          <div class="worldview" id="worldview" role="tabpanel" aria-label="World map" hidden>
+            <div id="geomap"></div><div class="geo-note" id="geo-note"></div>
+          </div>
           <div class="wifiview" id="wifiview" role="tabpanel" aria-label="Wi-Fi check" hidden></div>
         </div>
       </article>
 
-      <article class="panel col-span-12 xl:col-span-4 h-[500px]">
+      <article class="panel col-span-12 xl:col-span-4" id="panel-alerts">
         <header class="panel__head">
           <span class="idx">02 /</span><span class="title">Alerts</span><span class="help" data-help="alerts" tabindex="0" role="note" aria-label="About this panel">?</span>
           <span class="stat" id="alerts-stat"></span>
@@ -108,41 +116,40 @@
       </article>
     </section>
 
-    <section class="grid gap-3 grid-cols-12" aria-label="Charts">
-      <article class="panel col-span-12 lg:col-span-5 h-[220px]">
+    <section class="grid gap-3 grid-cols-12" aria-label="Traffic">
+      <article class="panel col-span-12" id="panel-traffic">
         <header class="panel__head">
-          <span class="idx">03 /</span><span class="title">Bandwidth</span><span class="help" data-help="bandwidth" tabindex="0" role="note" aria-label="About this panel">?</span>
+          <span class="idx">03 /</span><span class="title">Traffic</span><span class="help" data-help="traffic" tabindex="0" role="note" aria-label="About this panel">?</span>
           <span class="stat" id="bw-stat"></span>
         </header>
-        <div class="panel__body"><div class="chart-wrap"><canvas id="bw-chart"></canvas></div></div>
-      </article>
-      <article class="panel col-span-12 md:col-span-6 lg:col-span-3 h-[220px]">
-        <header class="panel__head">
-          <span class="idx">04 /</span><span class="title">Protocols</span><span class="help" data-help="protocols" tabindex="0" role="note" aria-label="About this panel">?</span>
-        </header>
-        <div class="panel__body">
-          <div class="donut-wrap">
-            <div class="donut-box">
-              <canvas id="proto-chart" width="132" height="132"></canvas>
-              <div class="donut-center"><div><div class="n" id="proto-total">0</div><div class="l" data-tip="All packets since capture started. The table below keeps the latest 10,000.">TOTAL</div></div></div>
+        <div class="panel__body traffic">
+          <div class="chart-wrap"><canvas id="bw-chart"></canvas></div>
+          <div class="protostrip">
+            <div class="protostrip__head">
+              <span>WHAT KIND OF TRAFFIC</span>
+              <span class="prototal" data-tip="All packets since capture started. The packet list keeps the latest 10,000."><b id="proto-total">0</b> packets</span>
             </div>
-            <table class="proto-table" id="proto-table" aria-label="Protocol shares"></table>
+            <div class="protobar" id="proto-bar" role="img" aria-label="Share of packets by protocol"></div>
+            <div class="protolegend" id="proto-legend"></div>
           </div>
         </div>
       </article>
-      <article class="panel col-span-12 md:col-span-6 lg:col-span-4 h-[220px]">
-        <header class="panel__head">
-          <span class="idx">05 /</span><span class="title">Geo-IP</span><span class="help" data-help="geo" tabindex="0" role="note" aria-label="About this panel">?</span>
-          <span class="stat" id="geo-stat"></span>
-        </header>
-        <div class="panel__body"><div id="geomap"></div><div class="geo-note" id="geo-note"></div></div>
-      </article>
     </section>
 
-    <section class="flex gap-3 h-[520px]" aria-label="Packets" id="panel-packets">
+    </main>
+
+  <div class="drawer" id="panel-packets" aria-label="Packet details">
+    <button class="drawer__bar" id="drawer-toggle" type="button" aria-expanded="false" aria-controls="drawer-body"
+            data-tip="The raw packets, like Wireshark. You don't need this day to day. Clicking a device or an alert opens it, filtered.">
+      <span class="idx">04 /</span><span class="title">Packet details</span>
+      <span class="drawer__stat" id="drawer-stat">0 PACKETS</span>
+      <span class="drawer__filter" id="drawer-filter"></span>
+      <span class="drawer__hint"><span id="drawer-hint">Open</span> <span class="drawer__chev" aria-hidden="true">&#9650;</span></span>
+    </button>
+    <div class="drawer__body" id="drawer-body" hidden>
       <article class="panel flex-1">
         <header class="panel__head">
-          <span class="idx">06 /</span><span class="title">Packets</span><span class="help" data-help="packets" tabindex="0" role="note" aria-label="About this panel">?</span>
+          <span class="title">Packets</span><span class="help" data-help="packets" tabindex="0" role="note" aria-label="About this panel">?</span>
           <div class="filterbar">
             <label class="sr-only" for="filter-input">Filter packets</label>
             <input class="filter-input" id="filter-input" spellcheck="false" autocomplete="off"
@@ -176,7 +183,7 @@
 
       <article class="panel inspector" id="inspector">
         <header class="panel__head">
-          <span class="idx">07 /</span><span class="title">Inspector</span><span class="help" data-help="inspector" tabindex="0" role="note" aria-label="About this panel">?</span>
+          <span class="title">Inspector</span><span class="help" data-help="inspector" tabindex="0" role="note" aria-label="About this panel">?</span>
           <button class="btn btn-icon ml-auto" id="btn-inspector" type="button" aria-label="Collapse inspector">
             <svg class="icon" aria-hidden="true"><use href="/static/vendor/icons.svg#i-layout-sidebar-right-collapse"></use></svg>
           </button>
@@ -185,8 +192,10 @@
           <div class="empty">Click a packet to see it explained in plain words, with its decoded headers and raw bytes below.</div>
         </div></div>
       </article>
-    </section>
-  </main>
+    
+    </div>
+  </div>
+
 
   <dialog id="export-dialog">
     <h2>Export this capture</h2>

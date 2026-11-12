@@ -1,4 +1,4 @@
-// Bandwidth line chart and protocol donut (Chart.js, vendored).
+// Bandwidth line chart (Chart.js, vendored) and the protocol share bar.
 
 import { el, fmtCount, fmtRate } from "./format.js";
 import { protoTip } from "./glossary.js";
@@ -48,11 +48,14 @@ function setupDefaults() {
 }
 
 export class Charts {
-  constructor({ bwCanvas, bwStat, protoCanvas, protoTable, protoTotal }) {
+  constructor({ bwCanvas, bwStat, protoBar, protoLegend, protoTotal }) {
     setupDefaults();
     this.bwStat = bwStat;
-    this.protoTable = protoTable;
+    this.protoBar = protoBar;
+    this.protoLegend = protoLegend;
     this.protoTotal = protoTotal;
+    this.protoNodes = new Map(); // protocol -> { seg, leg, text } reused between updates
+    this.protoKey = "";
     this.spikeSet = new Set();
     this.fileMode = false;
     const greenFill = ({ chart }) => {
@@ -111,26 +114,6 @@ export class Charts {
             },
           },
         },
-      },
-    });
-    this.donut = new window.Chart(protoCanvas, {
-      type: "doughnut",
-      data: {
-        labels: [],
-        datasets: [
-          {
-            data: [],
-            backgroundColor: [],
-            borderWidth: 2,
-            borderColor: "#12151c",
-            hoverOffset: 0,
-          },
-        ],
-      },
-      options: {
-        responsive: false,
-        cutout: "80%",
-        plugins: { tooltip: { enabled: false } },
       },
     });
   }
@@ -197,32 +180,55 @@ export class Charts {
   }
 
   setProtocols(counts) {
-    const entries = ORDER.map((k) => [k, counts[k] || 0]).filter(
-      ([, v]) => v > 0,
-    );
-    const total = entries.reduce((s, [, v]) => s + v, 0);
-    const d = this.donut.data;
-    d.labels = entries.map(([k]) => k);
-    d.datasets[0].data = entries.map(([, v]) => v);
-    d.datasets[0].backgroundColor = entries.map(([k]) => PROTO_COLORS[k]);
-    this.donut.update("none");
+    const { total, items } = protoShares(counts);
     this.protoTotal.textContent = fmtCount(total);
-    const rows = entries
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 7)
-      .map(([k, v]) => {
-        const name = el("td", { text: k });
-        name.style.color = PROTO_COLORS[k];
-        const pct = total ? (v / total) * 100 : 0;
-        return el(
-          "tr",
-          { class: pct < 1 ? "is-faint" : "", "data-tip": protoTip(k) },
-          name,
-          el("td", {
-            text: pct >= 1 ? `${Math.round(pct)}%` : pct > 0 ? "<1%" : "0%",
-          }),
-        );
-      });
-    this.protoTable.replaceChildren(...rows);
+    for (const it of items) {
+      let n = this.protoNodes.get(it.name);
+      if (!n) {
+        const text = el("em", {});
+        n = {
+          seg: el("div", { class: "protobar__seg" }),
+          leg: el("span", {}, el("i", {}), it.name, " ", text),
+          text,
+        };
+        this.protoNodes.set(it.name, n);
+      }
+      const tip = `${it.name}: ${protoTip(it.name) || "other traffic"}`;
+      n.seg.style.flexGrow = String(it.count);
+      n.seg.style.background = it.color;
+      n.seg.setAttribute("data-tip", `${tip} (${it.label})`);
+      n.leg.firstChild.style.background = it.color;
+      n.leg.setAttribute("data-tip", tip);
+      n.leg.classList.toggle("is-faint", it.faint);
+      n.text.textContent = it.label;
+    }
+    // Only touch the DOM's order when the set or ranking changed, so a tooltip that is open
+    // on one of these doesn't get yanked every second.
+    const key = items.map((it) => it.name).join();
+    if (key !== this.protoKey) {
+      this.protoKey = key;
+      this.protoBar.replaceChildren(...items.map((it) => this.protoNodes.get(it.name).seg));
+      this.protoLegend.replaceChildren(...items.map((it) => this.protoNodes.get(it.name).leg));
+    }
   }
+}
+
+/** Protocol shares, biggest first: [{ name, count, pct, label, faint, color }] and the total. */
+export function protoShares(counts) {
+  const entries = ORDER.map((k) => [k, counts[k] || 0]).filter(([, v]) => v > 0);
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+  const items = entries
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => {
+      const pct = total ? (count / total) * 100 : 0;
+      return {
+        name,
+        count,
+        pct,
+        label: pct >= 1 ? `${Math.round(pct)}%` : pct > 0 ? "<1%" : "0%",
+        faint: pct < 1,
+        color: PROTO_COLORS[name],
+      };
+    });
+  return { total, items };
 }

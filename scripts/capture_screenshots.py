@@ -62,22 +62,15 @@ def main() -> int:
         page.wait_for_selector("#netview svg")
         print("Waiting for the demo's incidents (bandwidth hog, port scan, cleartext login)…")
         wait_for(page, "document.querySelector('#nv-stat')?.textContent.includes('3 FLAGGED')")
-        wait_for(page, "[...document.querySelectorAll('.incident .ttl')]"
-                       ".some(e => e.textContent.includes('HOG'))"
-                       " || document.querySelectorAll('.alert-row').length >= 4")
+        wait_for(page, "document.querySelectorAll('.alert-row').length >= 4")
         time.sleep(2.5)
 
-        # Show the hog first in the incident card.
-        for _ in range(4):
-            if "HOG" in (page.locator(".incident .ttl").first.text_content() or ""):
-                break
-            page.locator(".incident [data-next]").first.click()
-            time.sleep(0.3)
-
-        # The card shows everything for 6 s, then shrinks to its headline. Hovering it keeps it
-        # open, so park the pointer away from it first.
-        page.mouse.move(800, 900)
-        time.sleep(6.8)
+        # Show the hog's details (its numbers, what it means, what to do) in the alert list.
+        hog_row = page.locator(".alert-row", has_text="Bandwidth hog").first
+        if hog_row.locator(".explain").is_hidden():
+            hog_row.locator(".info-btn").click()
+        page.mouse.move(800, 900)   # park the pointer so no tooltip or hover state is captured
+        time.sleep(0.6)
 
         print("Saving screenshots:")
         shot(page, None, "dashboard.png")
@@ -90,31 +83,42 @@ def main() -> int:
             hog.hover()
             time.sleep(0.4)
             shot(page, "#panel-network", "netview-hover.png")
-            page.mouse.move(5, 5)
+            page.mouse.move(800, 900)
 
         page.click("#tab-flows")
+        page.mouse.move(800, 900)
         time.sleep(1.2)
         shot(page, "#panel-network", "netview-flows.png")
+        page.click("#tab-world")
+        page.mouse.move(800, 900)   # off the tab, so its tooltip isn't in the picture
+        time.sleep(2.0)
+        shot(page, "#panel-network", "netview-world.png")
         page.click("#tab-wifi")
         print("  (collecting Wi-Fi demo readings…)")
         time.sleep(24)
         shot(page, "#panel-network", "netview-wifi.png")
         page.click("#tab-map")
         time.sleep(0.5)
+        page.mouse.move(800, 900)
 
-        shot(page, "#alerts", "alerts.png")
-        shot(page, "section[aria-label='Charts']", "charts-geo.png")
+        shot(page, "#panel-alerts", "alerts.png")
+        shot(page, "#panel-traffic", "traffic.png")
 
+        # The packet drawer opens by itself when you pick something; here we open it by hand.
+        page.click("#drawer-toggle")
         page.fill("#filter-input", "ip == 192.168.1.77 and proto == TCP")
         time.sleep(0.6)
-        shot(page, "section[aria-label='Packets']", "filter.png")
+        shot(page, "#drawer-body", "filter.png")
 
         page.fill("#filter-input", "proto == HTTP and info contains POST")
         time.sleep(0.6)
         page.locator(".prow").first.click()
         time.sleep(0.8)
-        shot(page, "section[aria-label='Packets']", "inspector.png")
+        shot(page, "#drawer-body", "inspector.png")
+        page.mouse.move(800, 100)
+        shot(page, None, "drawer.png")
         page.fill("#filter-input", "")
+        page.click("#drawer-toggle")
 
         print("Recording the demo GIF…")
         frames = []

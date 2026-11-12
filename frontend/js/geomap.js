@@ -1,6 +1,7 @@
 // Geo-IP world map (Leaflet, vendored). Popups are DOM nodes, never HTML strings.
 
 import { el } from "./format.js";
+import { fixAntimeridian } from "./worldfix.js";
 
 export class GeoMap {
   constructor({ container, stat, note, onSelect, onArrive }) {
@@ -25,7 +26,7 @@ export class GeoMap {
     fetch("/static/vendor/world-110m.geojson")
       .then((r) => r.json())
       .then((world) => {
-        L.geoJSON(world, {
+        L.geoJSON(fixAntimeridian(world), {
           interactive: false,
           style: { color: "#2a3342", weight: 0.6, fillColor: "#151a23", fillOpacity: 1 },
         }).addTo(this.map).bringToBack();

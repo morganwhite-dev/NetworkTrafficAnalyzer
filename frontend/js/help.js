@@ -16,7 +16,7 @@ const READING = [
   ],
   [
     "Click anything",
-    "Click a device, a server, a ribbon, a dot on the world map or an alert, and the packet list at the bottom shows only its traffic. Press Esc to clear.",
+    "Click a device, a server, a ribbon, a dot on the World tab or an alert, and the Packet details drawer at the bottom of the window opens, showing only its traffic. Press Esc to clear the filter.",
   ],
   [
     "Live and Demo",
@@ -24,18 +24,16 @@ const READING = [
   ],
   [
     "Keys",
-    "Press / to jump to the packet filter. Esc clears it. Arrow keys move through the packet list.",
+    "Press / to open the packet filter. Esc clears it. Arrow keys move through the packet list. The \u22ef menu next to the interface has Clear, Save capture and Open file.",
   ],
 ];
 
 const PANELS = [
   ["01  Network", "network"],
   ["02  Alerts", "alerts"],
-  ["03  Bandwidth", "bandwidth"],
-  ["04  Protocols", "protocols"],
-  ["05  Geo-IP", "geo"],
-  ["06  Packets", "packets"],
-  ["07  Inspector", "inspector"],
+  ["03  Traffic", "traffic"],
+  ["04  Packet details", "packets"],
+  ["     Inspector", "inspector"],
 ];
 
 function section(title, ...children) {

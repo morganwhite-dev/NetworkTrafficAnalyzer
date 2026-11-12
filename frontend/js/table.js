@@ -112,6 +112,7 @@ export class PacketTable {
     this.stat.textContent = this.filter
       ? `${this.view.length.toLocaleString()} OF ${total.toLocaleString()}`
       : `${total.toLocaleString()} PACKETS`;
+    this.onStat?.(this.stat.textContent);
     this.schedule();
   }
 
