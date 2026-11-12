@@ -8,6 +8,10 @@
   send without a CORS preflight this server never approves.
 - Host header validation (TrustedHostMiddleware, added in main.py) stops
   DNS-rebinding attacks against 127.0.0.1.
+- Browsers say where a request came from (``Sec-Fetch-Site``). API calls and the WebSocket
+  are refused unless that is ``same-origin``, so a page served by another program on this
+  Mac (a different localhost port is "same-site", and shares cookies) can't use the session
+  cookie against this server. Non-browser clients send no such header and are unaffected.
 - Strict security headers and a CSP with no third-party scripts.
 """
 
@@ -33,6 +37,12 @@ def csp(port: int) -> str:
 
 def _headers(scope: dict[str, Any]) -> dict[str, str]:
     return {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+
+
+def _foreign(headers: dict[str, str]) -> bool:
+    """True when a browser says this request did not come from this page itself."""
+    site = headers.get("sec-fetch-site")
+    return site is not None and site != "same-origin"
 
 
 def _cookie_token(headers: dict[str, str]) -> str | None:
@@ -61,7 +71,7 @@ class SecurityMiddleware:
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "websocket":
             headers = _headers(scope)
-            if headers.get("origin") not in self.origins or \
+            if headers.get("origin") not in self.origins or _foreign(headers) or \
                     not self._token_ok(_cookie_token(headers)):
                 await send({"type": "websocket.close", "code": 4403})
                 return
@@ -86,6 +96,9 @@ class SecurityMiddleware:
         if not path.startswith(PUBLIC_PREFIXES):
             if not authed:
                 await self._deny(send, path)
+                return
+            if path.startswith("/api/") and _foreign(headers):
+                await self._plain(send, 403, b"Cross-site request blocked.")
                 return
             if method not in SAFE_METHODS:
                 if headers.get("origin") not in self.origins or \

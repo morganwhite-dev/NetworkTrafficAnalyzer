@@ -1979,3 +1979,25 @@ dialog.help-dialog[open] {
 .insp-summary .meta.plain {
   color: var(--text);
 }
+
+/* ---------- replayed data strip ---------- */
+.demostrip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  background: var(--warn-fill);
+  border-bottom: 1px solid rgba(255, 176, 0, 0.35);
+  color: var(--text);
+  font-size: 12px;
+}
+.demostrip[hidden] {
+  display: none;
+}
+.demostrip > span {
+  flex: 1;
+}
+.demostrip b {
+  color: var(--warn);
+  letter-spacing: 0.1em;
+}

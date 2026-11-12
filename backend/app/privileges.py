@@ -19,17 +19,41 @@ def running_as_root() -> bool:
     return os.geteuid() == 0
 
 
-def drop_to_sudo_user() -> str | None:
-    """Switch to SUDO_UID/SUDO_GID. Returns the user name, or None if not under sudo."""
-    if os.geteuid() != 0:
-        return None
-    uid_s, gid_s = os.environ.get("SUDO_UID"), os.environ.get("SUDO_GID")
+def drop_target() -> tuple[int, int] | None:
+    """Who to become after the capture socket is open.
+
+    Under sudo that is the user who ran sudo (SUDO_UID/SUDO_GID). In a container there is no
+    sudo, so NTA_DROP_UID/NTA_DROP_GID name an unprivileged user instead. Returns None when
+    neither is set.
+    """
+    env = os.environ
+    uid_s = env.get("SUDO_UID") or env.get("NTA_DROP_UID")
+    gid_s = env.get("SUDO_GID") or env.get("NTA_DROP_GID")
     if not uid_s or not gid_s:
         return None
-    uid, gid = int(uid_s), int(gid_s)
-    if uid == 0:
-        raise PrivilegeError("SUDO_UID is 0; refusing to keep running as root.")
-    user = pwd.getpwuid(uid)
+    try:
+        uid, gid = int(uid_s), int(gid_s)
+    except ValueError as exc:
+        raise PrivilegeError("The user and group to drop to must be numbers.") from exc
+    if uid <= 0 or gid <= 0:
+        raise PrivilegeError("Refusing to keep running as root (the drop user or group is 0).")
+    return uid, gid
+
+
+def drop_to_sudo_user() -> str | None:
+    """Switch to the unprivileged user from `drop_target`. Returns its name, or None if there
+    is nobody to switch to (not root, or no sudo and no NTA_DROP_UID)."""
+    if os.geteuid() != 0:
+        return None
+    target = drop_target()
+    if target is None:
+        return None
+    uid, gid = target
+    try:
+        user = pwd.getpwuid(uid)
+        name, home = user.pw_name, user.pw_dir
+    except KeyError:                       # containers often have no passwd entry for it
+        name, home = f"uid{uid}", "/tmp"  # noqa: S108 - the container's private tmpfs
     os.setgroups([])
     os.setgid(gid)
     os.setuid(uid)
@@ -39,7 +63,7 @@ def drop_to_sudo_user() -> str | None:
         pass
     else:
         raise PrivilegeError("Still able to regain root after dropping privileges.")
-    os.environ["HOME"] = user.pw_dir
-    os.environ["USER"] = user.pw_name
-    os.environ["LOGNAME"] = user.pw_name
-    return user.pw_name
+    os.environ["HOME"] = home
+    os.environ["USER"] = name
+    os.environ["LOGNAME"] = name
+    return name

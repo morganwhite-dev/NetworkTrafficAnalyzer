@@ -2,9 +2,10 @@
 
 1. Start the demo (replay only, so no real traffic ends up in the images, and
    synthetic Wi-Fi readings so your real network details stay out too):
-       NTA_TOKEN=shots NTA_WIFI_DEMO=1 scripts/run.sh --replay samples/demo.pcap --loop
+       NTA_TOKEN=demo-screenshots-0123 NTA_WIFI_DEMO=1 \
+         scripts/run.sh --replay samples/demo.pcap --loop
 2. In another terminal:
-       NTA_TOKEN=shots .venv/bin/python scripts/capture_screenshots.py
+       NTA_TOKEN=demo-screenshots-0123 .venv/bin/python scripts/capture_screenshots.py
 
 Uses your installed Google Chrome through Playwright (no browser download).
 """
@@ -54,6 +55,8 @@ def main() -> int:
         browser = pw.chromium.launch(channel="chrome", headless=True)
         ctx = browser.new_context(viewport={"width": 1600, "height": 1000},
                                   device_scale_factor=SCALE, color_scheme="dark")
+        # The first-run hint is for people, not for the README pictures.
+        ctx.add_init_script("try{localStorage.setItem('nta-firstrun-dismissed','1')}catch(e){}")
         page = ctx.new_page()
         page.goto(f"{BASE}/?t={TOKEN}")
         page.wait_for_selector("#netview svg")
@@ -70,6 +73,11 @@ def main() -> int:
                 break
             page.locator(".incident [data-next]").first.click()
             time.sleep(0.3)
+
+        # The card shows everything for 6 s, then shrinks to its headline. Hovering it keeps it
+        # open, so park the pointer away from it first.
+        page.mouse.move(800, 900)
+        time.sleep(6.8)
 
         print("Saving screenshots:")
         shot(page, None, "dashboard.png")

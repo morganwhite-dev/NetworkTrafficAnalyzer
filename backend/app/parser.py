@@ -8,6 +8,7 @@ taking the pipeline down.
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -410,8 +411,13 @@ def row(pid: int, f: Facts) -> dict[str, Any]:
     }
 
 
-def layer_tree(pkt: Packet, max_layers: int = 12, max_fields: int = 40) -> list[dict[str, Any]]:
-    """Per-layer fields with byte ranges, for the inspector."""
+def layer_tree(pkt: Packet, max_layers: int = 12, max_fields: int = 40,
+               mask: Callable[[str], str] | None = None) -> list[dict[str, Any]]:
+    """Per-layer fields with byte ranges, for the inspector.
+
+    ``mask`` runs on the whole value *before* it is shortened for display, so a secret that
+    straddles the cut can never leave its first half visible.
+    """
     out: list[dict[str, Any]] = []
     try:
         total = len(bytes(pkt))
@@ -430,6 +436,8 @@ def layer_tree(pkt: Packet, max_layers: int = 12, max_fields: int = 40) -> list[
                     shown = fd.i2repr(layer, value)
                 except Exception:  # noqa: BLE001
                     shown = "?"
+                if mask is not None:
+                    shown = mask(str(shown))
                 fields.append({"name": clean(fd.name, 40), "value": clean(shown, 160)})
             out.append({"name": clean(layer.name, 60), "start": start,
                         "end": start + whole - payload_len, "fields": fields})

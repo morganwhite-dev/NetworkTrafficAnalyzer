@@ -16,7 +16,11 @@ GREEN, CYAN, RED, DIM, RESET = "\033[32m", "\033[36m", "\033[31m", "\033[2m", "\
 
 
 def parse_args(argv: list[str] | None = None) -> Settings:
-    s = Settings.from_env()
+    try:
+        s = Settings.from_env()
+    except ValueError as exc:
+        print(f"{RED}{exc}{RESET}")
+        sys.exit(2)
     p = argparse.ArgumentParser(prog="nta", description="Network Traffic Analyzer")
     p.add_argument("--iface", default=s.iface, help="interface to capture on (default: en0)")
     p.add_argument("--replay", type=Path, default=s.replay,

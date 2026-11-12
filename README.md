@@ -141,7 +141,7 @@ That profile uses host networking, keeps the dashboard on `127.0.0.1`, and only 
 | ![Filter](docs/screenshots/filter.png) **Filter** to one device and protocol.                       | ![Inspector](docs/screenshots/inspector.png) **Inspector** with decoded layers and a Hex/ASCII dump.                          |
 | ![Wi-Fi check](docs/screenshots/netview-wifi.png) **Wi-Fi check:** one plain answer about why it's slow (demo readings shown). | ![Charts and Geo-IP map](docs/screenshots/charts-geo.png) **Bandwidth, protocols and the world map.** |
 
-Every screenshot comes from the bundled demo capture and synthetic Wi-Fi readings, so none of them show a real network. To regenerate them, start the demo with `NTA_TOKEN=shots NTA_WIFI_DEMO=1` and run `scripts/capture_screenshots.py`.
+Every screenshot comes from the bundled demo capture and synthetic Wi-Fi readings, so none of them show a real network. To regenerate them, start the demo with `NTA_TOKEN=demo-screenshots-0123 NTA_WIFI_DEMO=1` (tokens must be at least 16 characters) and run `scripts/capture_screenshots.py`.
 
 ## Everyday uses
 
@@ -226,5 +226,6 @@ Geo-IP data by [DB-IP.com](https://db-ip.com) (CC BY 4.0). World outline from [N
 - [x] Phase 10: map labels sized to their neighbours (long IPv6 addresses no longer collide), Live | Demo switch
 - [x] Phase 11: clarity pass from a design review: in-app guide, one tooltip system, plain-English alert explainers, friendly names in the packet table, quick filters, readable dim text, compact incident card, collision-aware map callouts
 - [x] Phase 12: fixes from a security review of the switch: a paused demo can't leak a packet into the next source, and only an explicit `replay` ever selects the demo
+- [x] Phase 13: hardening from the same review: headers-only export really is headers only, source switches are serialised and recover from a failed Live start, inspector fields are masked before they are shortened, other local web pages can't borrow the session cookie (`Sec-Fetch-Site`), tokens must be 16+ characters, a DEMO DATA strip and `nta-demo-` export names, the Docker capture profile drops root, refreshed screenshots
 
 </details>

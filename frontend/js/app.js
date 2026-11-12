@@ -237,7 +237,23 @@ function renderModeToggle() {
   const live = s.mode === "live" || s.mode === "idle";
   $("mode-live").setAttribute("aria-pressed", String(live));
   $("mode-demo").setAttribute("aria-pressed", String(demo));
+  renderDemoStrip(s);
   $("mode-demo").title = `Replay ${s.replay || "the demo"}: made-up home traffic that triggers every kind of alert`;
+}
+
+// Replayed data must never pass for live data, whatever else is on screen.
+function renderDemoStrip(s) {
+  const strip = $("demo-strip");
+  strip.hidden = s.mode !== "replay";
+  if (strip.hidden) return;
+  const demo = s.source === "demo.pcap";
+  $("demo-strip-text").replaceChildren(
+    el("b", { text: demo ? "DEMO DATA" : "REPLAY" }),
+    demo
+      ? " · made-up traffic, not your network. Every alert here is staged."
+      : ` · playing back ${s.source || "a capture"}, not live traffic.`,
+  );
+  $("demo-strip-live").hidden = !s.iface;
 }
 
 // A bare grid tells a first-time user nothing: say what to do.
@@ -281,6 +297,7 @@ async function switchSource(demo) {
   }
 }
 $("mode-live").addEventListener("click", () => switchSource(false));
+$("demo-strip-live").addEventListener("click", () => switchSource(false));
 $("mode-demo").addEventListener("click", () => switchSource(true));
 
 async function loadInterfaces() {

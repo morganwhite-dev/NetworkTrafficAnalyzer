@@ -49,6 +49,7 @@ class Runtime:
     wifi: WifiMonitor | None = None
     launch_url: str | None = None
     upload_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    mode_lock: asyncio.Lock = field(default_factory=asyncio.Lock)   # serialises source switches
     workdir: Path = field(default_factory=lambda: Path(tempfile.mkdtemp(prefix="nta-")))
 
     @property
@@ -140,56 +141,70 @@ def create_app(rt: Runtime) -> FastAPI:
     async def capture_start(request: Request) -> dict[str, Any]:
         body = await _json(request)
         iface = body.get("iface")
-        if iface == "replay" and rt.replay_file:   # only this literal selects the demo
-            if rt.pipeline.mode != "replay":
-                rt.live.stop()
+        # One mode change at a time: a double click or a second tab must not interleave
+        # two switches and leave demo data labelled as live.
+        async with rt.mode_lock:
+            if iface == "replay" and rt.replay_file:   # only this literal selects the demo
+                if rt.pipeline.mode != "replay":
+                    await asyncio.to_thread(rt.live.stop)
+                    rt.pipeline.clear()
+                    start_replay(rt)
+                    await rt.hub.send_snapshot_all()
+                elif rt.replayer:
+                    rt.replayer.start()
+                rt.hub.broadcast(rt.status())
+                return rt.status()
+            iface = iface or rt.live.iface or s.iface
+            if not isinstance(iface, str) or not valid_iface(iface):
+                raise HTTPException(400, "Unknown network interface.")
+            if rt.privilege == "sudo-dropped" and iface not in rt.live.preopened:
+                raise HTTPException(409, f"Root was dropped at startup. Restart with sudo and "
+                                         f"--iface {iface} to capture there.")
+            was_demo = rt.pipeline.mode == "replay" and rt.capturing
+            if rt.replayer:
+                rt.replayer.pause()
+            changed = rt.pipeline.mode != "live" or rt.pipeline.source != iface
+            if changed:
+                await asyncio.to_thread(rt.live.stop)
                 rt.pipeline.clear()
-                start_replay(rt)
+            try:
+                await asyncio.to_thread(rt.live.start, iface)
+            except Exception as exc:  # noqa: BLE001 - Scapy raises its own exception types
+                text = str(exc)
+                if isinstance(exc, PermissionError) or "Permission denied" in text \
+                        or "Operation not permitted" in text:
+                    rt.live.error = "Permission denied opening the capture device."
+                    detail, code = capture_access()[1], 403
+                else:
+                    rt.live.error = clean(text, 200)
+                    detail, code = f"Could not start capture: {rt.live.error}", 409
+                if was_demo and rt.replay_file:
+                    # Live could not start: put the demo back the way it was, instead of
+                    # leaving an empty, paused "replay".
+                    start_replay(rt)
+                    await rt.hub.send_snapshot_all()
+                rt.hub.broadcast(rt.status())
+                raise HTTPException(code, detail) from exc
+            rt.pipeline.mode, rt.pipeline.source = "live", iface
+            if changed:
                 await rt.hub.send_snapshot_all()
-            elif rt.replayer:
-                rt.replayer.start()
             rt.hub.broadcast(rt.status())
             return rt.status()
-        iface = iface or rt.live.iface or s.iface
-        if not isinstance(iface, str) or not valid_iface(iface):
-            raise HTTPException(400, "Unknown network interface.")
-        if rt.privilege == "sudo-dropped" and iface not in rt.live.preopened:
-            raise HTTPException(409, f"Root was dropped at startup. Restart with sudo and "
-                                     f"--iface {iface} to capture there.")
-        if rt.replayer:
-            rt.replayer.pause()
-        changed = rt.pipeline.mode != "live" or rt.pipeline.source != iface
-        if changed:
-            rt.live.stop()
-            rt.pipeline.clear()
-        try:
-            await asyncio.to_thread(rt.live.start, iface)
-        except Exception as exc:  # noqa: BLE001 - Scapy raises its own exception types
-            text = str(exc)
-            if isinstance(exc, PermissionError) or "Permission denied" in text \
-                    or "Operation not permitted" in text:
-                rt.live.error = "Permission denied opening the capture device."
-                raise HTTPException(403, capture_access()[1]) from exc
-            rt.live.error = clean(text, 200)
-            raise HTTPException(409, f"Could not start capture: {rt.live.error}") from exc
-        rt.pipeline.mode, rt.pipeline.source = "live", iface
-        if changed:
-            await rt.hub.send_snapshot_all()
-        rt.hub.broadcast(rt.status())
-        return rt.status()
 
     @app.post("/api/capture/stop")
     async def capture_stop() -> dict[str, Any]:
-        await asyncio.to_thread(rt.live.stop)
-        if rt.replayer:
-            rt.replayer.pause()
-        rt.hub.broadcast(rt.status())
-        return rt.status()
+        async with rt.mode_lock:
+            await asyncio.to_thread(rt.live.stop)
+            if rt.replayer:
+                rt.replayer.pause()
+            rt.hub.broadcast(rt.status())
+            return rt.status()
 
     @app.post("/api/clear")
     async def clear() -> dict[str, Any]:
-        rt.pipeline.clear()
-        await rt.hub.send_snapshot_all()
+        async with rt.mode_lock:
+            rt.pipeline.clear()
+            await rt.hub.send_snapshot_all()
         return {"ok": True}
 
     @app.get("/api/packets/{pid}")
@@ -214,8 +229,10 @@ def create_app(rt: Runtime) -> FastAPI:
         data = await asyncio.to_thread(build)
         stamp = time.strftime("%Y%m%d-%H%M%S")
         suffix = "-headers" if headers_only else ""
+        # Say where the data came from, so an exported demo can't pass for a real capture.
+        origin = {"replay": "demo-", "file": "file-"}.get(rt.pipeline.mode, "")
         return Response(data, media_type="application/vnd.tcpdump.pcap", headers={
-            "content-disposition": f'attachment; filename="nta-{stamp}{suffix}.pcap"'})
+            "content-disposition": f'attachment; filename="nta-{origin}{stamp}{suffix}.pcap"'})
 
     @app.post("/api/pcap")
     async def upload(request: Request) -> dict[str, Any]:
@@ -253,13 +270,14 @@ def create_app(rt: Runtime) -> FastAPI:
                 raise HTTPException(422, str(exc)) from exc
             finally:
                 src.unlink(missing_ok=True)
-            rt.live.stop()
-            if rt.replayer:
-                rt.replayer.pause()
-            await asyncio.to_thread(load_file, rt, dst, name)
-            dst.unlink(missing_ok=True)
-            await rt.hub.send_snapshot_all()
-            rt.hub.broadcast(rt.status())
+            async with rt.mode_lock:
+                await asyncio.to_thread(rt.live.stop)
+                if rt.replayer:
+                    rt.replayer.pause()
+                await asyncio.to_thread(load_file, rt, dst, name)
+                dst.unlink(missing_ok=True)
+                await rt.hub.send_snapshot_all()
+                rt.hub.broadcast(rt.status())
             return {"ok": True, "name": name, **info}
 
     @app.post("/api/geo/clear")

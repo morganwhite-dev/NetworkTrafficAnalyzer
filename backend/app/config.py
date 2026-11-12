@@ -10,6 +10,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = REPO_ROOT / "frontend"
+MIN_TOKEN_LEN = 16
 DEMO_PCAP = REPO_ROOT / "samples" / "demo.pcap"   # bundled demo, offered by the Live/Demo toggle
 DEFAULT_GEO_DB = REPO_ROOT / "data" / "dbip-city-lite.mmdb"
 
@@ -75,6 +76,12 @@ class Settings:
         if env.get("NTA_GEO_DB"):
             s.geo_db = Path(env["NTA_GEO_DB"])
         if env.get("NTA_TOKEN"):
+            if len(env["NTA_TOKEN"]) < MIN_TOKEN_LEN:
+                raise ValueError(
+                    f"NTA_TOKEN must be at least {MIN_TOKEN_LEN} characters (it is the only "
+                    "thing between other local programs and your traffic). Leave it unset to "
+                    "get a random one."
+                )
             s.token = env["NTA_TOKEN"]
         s.allow_remote = env.get("NTA_ALLOW_REMOTE", "0") == "1"
         if env.get("NTA_PUBLIC_PORT"):

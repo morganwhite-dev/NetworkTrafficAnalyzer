@@ -29,14 +29,20 @@ services:
     build: .
     image: network-traffic-analyzer:latest
     network_mode: host          # Linux only: sees the host's interfaces
-    user: "0:0"                 # raw sockets need root *inside* the container...
+    user: "0:0"                 # raw sockets need root *inside* the container to open...
     cap_drop: [ALL]
-    cap_add: [NET_RAW]          # ...but only this one capability
+    cap_add: [NET_RAW, SETUID, SETGID]   # ...then SETUID/SETGID let it become `nta` (10001)
+    pids_limit: 256
+    mem_limit: 1g
     environment:
       NTA_HOST: 127.0.0.1       # host networking: keep the dashboard off the LAN
       NTA_ALLOW_REMOTE: "0"
       NTA_IFACE: ${NTA_IFACE:-eth0}
       NTA_TOKEN: ${NTA_TOKEN:-}
+      # Once the capture socket is open the app drops to this user, exactly like `sudo` does
+      # on macOS. The server and every packet parser then run unprivileged.
+      NTA_DROP_UID: "10001"
+      NTA_DROP_GID: "10001"
     volumes:
       - ./data:/app/data:ro
     read_only: true

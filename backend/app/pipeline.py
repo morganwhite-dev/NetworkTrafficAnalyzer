@@ -215,15 +215,23 @@ class Pipeline:
             raw, linktype, ts, r, secrets = rec.raw, rec.linktype, rec.ts, rec.row, rec.secrets
         pkt = dissect(raw, linktype)
         shown = raw[:65536]
-        layers = layer_tree(pkt)
         # Keep detected secrets out of the decoded fields too (the hex view blurs them).
-        hidden = [raw[s:e].decode("utf-8", "replace") for s, e in secrets if e - s >= 3]
-        for layer in layers:
-            for fld in layer["fields"]:
-                val = mask_text(fld["value"])
-                for sec in hidden:
-                    val = val.replace(sec, MASK)
-                fld["value"] = val
+        # Scapy prints bytes as an escaped repr, so hide that spelling of each secret as well.
+        hidden: set[str] = set()
+        for start, end in secrets:
+            if end - start >= 3:
+                chunk = raw[start:end]
+                hidden.add(chunk.decode("utf-8", "replace"))
+                hidden.add(repr(chunk)[2:-1])
+
+        def mask(val: str) -> str:
+            val = mask_text(val)
+            for sec in hidden:
+                val = val.replace(sec, MASK)
+            return val
+
+        # Masked before the value is shortened, so a secret cut in half can't half-show.
+        layers = layer_tree(pkt, mask=mask)
         return {"id": pid, "ts": ts, "linktype": linktype, "row": r, "caplen": len(raw),
                 "hex": shown.hex(), "truncated": len(raw) > len(shown),
                 "layers": layers, "secrets": [list(s) for s in secrets]}
