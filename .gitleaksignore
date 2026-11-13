@@ -1,0 +1,6 @@
+# Known, deliberate non-secrets (gitleaks fingerprints). Anything else still fails CI.
+# An example token for a local demo server, in the script's usage notes:
+55d29a33ec067e4f79c9681cc3620adc71e3020f:scripts/record_demo.py:generic-api-key:4
+55d29a33ec067e4f79c9681cc3620adc71e3020f:scripts/record_demo.py:generic-api-key:7
+# A made-up password ("user:supersecretpassword") the cleartext-login test must catch:
+bfed88591b34682af700e22b09bcb17cb79a14b2:backend/tests/test_api.py:generic-api-key:284
