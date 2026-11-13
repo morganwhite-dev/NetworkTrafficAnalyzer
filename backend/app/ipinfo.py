@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 import socket
 import threading
 import time
@@ -54,6 +55,10 @@ SERVICE_NOTES: list[tuple[tuple[str, ...], str]] = [
     (("digitalocean", "linode", "ovh", "hetzner", "vultr"),
      "A hosting company: someone rents servers here, so it could be almost anything."),
 ]
+
+# Router makers that mostly show up on shared networks run by someone else.
+MANAGED = re.compile(r"(routerboard|mikrotik|cisco|meraki|aruba|ruckus|ubiquiti|juniper|"
+                     r"fortinet|extreme|cambium|hewlett)", re.IGNORECASE)
 
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ipinfo")
 _cache: OrderedDict[str, tuple[float, dict[str, Any]]] = OrderedDict()
@@ -106,9 +111,9 @@ def address_kind(ip: str) -> str:
     if a.is_loopback:
         return "a loopback address (this Mac talking to itself)"
     if a.is_link_local:
-        return "a link-local address (only works inside your home network)"
+        return "a link-local address (only works inside your network)"
     if a.is_private:
-        return "a private address (only works inside your home network)"
+        return "a private address (only works inside your network)"
     if a.is_multicast:
         return "a multicast address (one message for a whole group of devices)"
     return "a public internet address"
@@ -125,10 +130,13 @@ def explain(ip: str, local: dict[str, Any], owner: dict[str, Any] | None,
             hostname: str | None, status: str) -> dict[str, Any]:
     """Turn what we know into a title, a plain sentence and a list of facts."""
     kind = local.get("kind") or "other"
-    name = local.get("name") or ""
+    # Its own name (what it called itself), not the label the map made up for it.
+    name = local.get("own_name", local.get("name")) or ""
     if name == ip:
         name = ""
-    org = (owner or {}).get("org") or ""
+    app = local.get("app") or ""
+    maker = local.get("maker") or ""
+    org = (owner or {}).get("org") or local.get("owner") or ""
     place = ", ".join(x for x in ((owner or {}).get("city"), (owner or {}).get("region"),
                                   (owner or {}).get("country")) if x)
     if not place:
@@ -140,15 +148,36 @@ def explain(ip: str, local: dict[str, Any], owner: dict[str, Any] | None,
         summary = "This is your Mac. Every connection in this app starts or ends here."
     elif kind == "gateway":
         title = "Your router"
-        summary = ("This is your router, the box that connects your home network to the "
+        summary = ("This is your router, the box that connects your network to the "
                    "internet. All your internet traffic passes through it.")
-    elif kind in ("lan", "other") and not ipaddress.ip_address(ip).is_global:
-        title = name or "A device on your network"
-        summary = (f"A device on your home network{f', called {name}' if name else ''}. "
-                   "Devices like this are phones, TVs, printers, speakers and other computers.")
+        if maker:
+            summary += f" Made by {maker}."
+        if MANAGED.search(maker):
+            summary += (" That brand is usually run by a building, campus or office IT team, so "
+                        "this is probably a shared network you can't log in to.")
+    elif kind == "lan" or (kind == "other" and not ipaddress.ip_address(ip).is_global):
+        if name:
+            title = name
+            summary = f"A device on your network that calls itself {name}"
+            summary += f", made by {maker}." if maker else "."
+        elif local.get("private_mac"):
+            title = "Private device"
+            summary = ("A device on your network that hides its real hardware address. Phones, "
+                       "tablets and laptops do this for privacy, so it is almost certainly one "
+                       "of those. Its maker can't be looked up.")
+        elif maker:
+            title = f"{maker} device"
+            summary = (f"A device on your network made by {maker}. It didn't announce a name, "
+                       "so this is as specific as it gets.")
+        else:
+            title = "A device on your network"
+            summary = ("A device on your network that didn't announce a name, and whose maker "
+                       "isn't in the lookup table.")
+        if len(local.get("addrs") or []) > 1:
+            summary += f" It uses {len(local['addrs'])} addresses; they're shown as one device."
     else:
-        who = org or hostname or name
-        title = name or org or hostname or ip
+        who = org or hostname or name or app
+        title = name or org or hostname or (f"{app} server" if app else ip)
         summary = f"A server on the internet{f', run by {org}' if org else ''}"
         if place:
             summary += f", in {place}"
@@ -157,6 +186,8 @@ def explain(ip: str, local: dict[str, Any], owner: dict[str, Any] | None,
             summary += f" {note}"
         if name and name != title:
             summary += f" Your Mac reached it as {name}."
+        if app:
+            summary += f" On this Mac, {app} is the app talking to it."
         if not who:
             summary += (" I couldn't find out who runs it" +
                         (" (the lookup is turned off)." if status == "disabled"
@@ -173,6 +204,11 @@ def explain(ip: str, local: dict[str, Any], owner: dict[str, Any] | None,
         add("Address", f"{ip}, {address_kind(ip)}")
     if name and name != title:
         add("Name seen", name)
+    add("Used by", app)
+    add("Made by", maker if kind in ("lan", "gateway") else "")
+    others = [a for a in (local.get("addrs") or []) if a != ip]
+    if others:
+        add("Also uses", ", ".join(others[:4]) + (" …" if len(others) > 4 else ""))
     add("Owner", org)
     if (owner or {}).get("asn"):
         add("Network", f"{owner['asn']}" + (f" ({owner['isp']})" if owner.get("isp")
@@ -188,6 +224,13 @@ def explain(ip: str, local: dict[str, Any], owner: dict[str, Any] | None,
         add("First seen", time.strftime("%H:%M:%S", time.localtime(local["first"])))
     return {"ip": ip, "kind": kind, "title": title, "summary": summary, "facts": facts,
             "status": status}
+
+
+def cached_owner(ip: str) -> str:
+    """The owner found when someone clicked this address earlier, if any (no lookup)."""
+    with _cache_lock:
+        hit = _cache.get(ip)
+    return ((hit[1].get("owner") or {}).get("org") or "") if hit else ""
 
 
 def lookup(ip: str, local: dict[str, Any], enabled: bool = True) -> dict[str, Any]:

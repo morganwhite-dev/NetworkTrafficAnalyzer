@@ -84,7 +84,8 @@ export class AlertsFeed {
             {},
             el("li", { text: "devices scanning your network for open doors" }),
             el("li", { text: "passwords or logins sent without encryption" }),
-            el("li", { text: "one server hogging your bandwidth" }),
+            el("li", { text: "slow Wi-Fi or a slow internet connection, and whether this Mac is the cause" }),
+            el("li", { text: "this Mac or one server using a lot of bandwidth" }),
             el("li", { text: "devices pretending to be your router" }),
             el("li", { text: "data hidden inside name lookups, and VPN leaks" }),
           ),
@@ -97,7 +98,9 @@ export class AlertsFeed {
   }
 
   row(a, animate = true) {
-    const sevCls = RED.has(a.severity)
+    const sevCls = a.ended
+      ? "is-ended"
+      : RED.has(a.severity)
       ? "sev-r"
       : a.severity === "medium"
         ? "sev-a"
@@ -114,6 +117,13 @@ export class AlertsFeed {
           "data-tip": SEVERITY_TIPS[a.severity] || "",
         }),
         el("span", { class: "what", text: a.title }),
+        a.ended
+          ? el("span", {
+              class: "ended",
+              text: "ENDED",
+              "data-tip": `Stopped at ${clock(a.ended)}. The numbers are from when it was happening.`,
+            })
+          : null,
         el("span", { class: "time", text: clock(a.ts) }),
       ),
       el("div", { class: "why", text: a.reason, title: a.reason }),
@@ -138,10 +148,14 @@ export class AlertsFeed {
               ),
             )
           : null,
+        a.detail?.why ? el("b", { text: "Is it this Mac?" }) : null,
+        a.detail?.why ? el("span", { text: a.detail.why }) : null,
         el("b", { text: "What it means" }),
-        el("span", { text: info.means }),
+        el("span", { text: a.detail?.summary || info.means }),
         el("b", { text: "What to do" }),
-        el("span", { text: info.todo }),
+        a.detail?.tips?.length
+          ? el("ul", { class: "tips" }, ...a.detail.tips.map((t) => el("li", { text: t })))
+          : el("span", { text: info.todo }),
       );
       const btn = el("button", {
         class: "info-btn",

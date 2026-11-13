@@ -13,6 +13,7 @@ import asyncio
 import ipaddress
 import json
 import os
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -54,8 +55,35 @@ def _valid(entry: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+_ORG_TAIL = re.compile(
+    r"([,.]|\s+(inc|corp|corporation|co|ltd|llc|limited|gmbh|bv|b\.v|ag|sa|plc|"
+    r"technologies|international|communications|holdings|group|networks?)\b).*$",
+    re.IGNORECASE)
+
+
+def short_org(org: str) -> str:
+    """"Apple Inc." -> "Apple", "Amazon.com, Inc." -> "Amazon", "Microsoft Corporation" ->
+    "Microsoft". Network registry names in capitals ("GOOGLE-CLOUD") become title case."""
+    org = clean(org or "", 96).strip()
+    if not org:
+        return ""
+    out = _ORG_TAIL.sub("", org.replace(".com", "")).strip(" -,.") or org
+    if out.isupper() and len(out) > 4:
+        out = out.replace("-", " ").title()
+    return " ".join(out.split()[:3])[:28]
+
+
 class GeoResolver:
-    def __init__(self, provider: str, db_path: Path, data_dir: Path) -> None:
+    def __init__(self, provider: str, db_path: Path, data_dir: Path,
+                 asn_path: Path | None = None) -> None:
+        self.asn = None
+        self.owners: OrderedDict[str, str] = OrderedDict()
+        if asn_path is not None and asn_path.exists():
+            try:
+                import maxminddb
+                self.asn = maxminddb.open_database(str(asn_path))
+            except Exception:  # noqa: BLE001
+                self.asn = None
         self.db = None
         self.provider = "off"
         if provider in ("auto", "dbip") and db_path.exists():
@@ -85,9 +113,31 @@ class GeoResolver:
             hint = ("No Geo-IP database found. Run scripts/download_geoip.sh for offline "
                     "lookups, or start with --geo ip-api to use the online service.")
         return {"provider": self.provider, "requested": self.requested, "hint": hint,
+                "owners": self.asn is not None,
                 "error": self.last_error, "cached": len(self.cache)}
 
     # ---------------------------------------------------------------- lookups
+    def owner(self, addr: str) -> str:
+        """Who runs a public address ("Apple", "Microsoft"), from the offline DB-IP ASN
+        table if it is installed. Never goes online."""
+        if self.asn is None or not lookup_allowed(addr):
+            return ""
+        with self.lock:
+            hit = self.owners.get(addr)
+        if hit is not None:
+            return hit
+        try:
+            rec = self.asn.get(addr)
+        except Exception:  # noqa: BLE001
+            rec = None
+        org = short_org((rec or {}).get("autonomous_system_organization", "")
+                        if isinstance(rec, dict) else "")
+        with self.lock:
+            self.owners[addr] = org
+            while len(self.owners) > CACHE_MAX:
+                self.owners.popitem(last=False)
+        return org
+
     def get(self, addr: str) -> dict[str, Any] | None:
         if self.provider == "off" or not lookup_allowed(addr):
             return None

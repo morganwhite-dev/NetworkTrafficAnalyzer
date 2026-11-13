@@ -7,8 +7,9 @@ the router is slow.
 - Signal comes from Apple's CoreWLAN framework (no admin rights needed, and
   macOS hides the network name from apps without location access, which we
   don't ask for). Off macOS, or without PyObjC, only the pings run.
-- Pings use the system /sbin/ping (no root needed). They only run while
-  someone has the Wi-Fi tab open, so the app doesn't ping in the background.
+- Pings use the system /sbin/ping (no root needed). They run every 2 s while
+  someone has the Wi-Fi tab open, and every 5 s during a live capture so a slow
+  network can raise an alert. With neither, nothing is pinged.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from typing import Any
 PING = "/sbin/ping" if sys.platform == "darwin" else "/bin/ping"
 IPCONFIG = "/usr/sbin/ipconfig"
 INTERVAL = 2.0
+BACKGROUND_INTERVAL = 5.0          # during a live capture with the Wi-Fi tab closed
 HISTORY = 300                       # 10 minutes at one sample every 2 s
 WINDOW = 60                         # the verdict looks at the last minute
 ACTIVE_FOR = 15                     # pings keep running this long after the last keepalive
@@ -143,6 +145,7 @@ class WifiMonitor:
         self.link: dict[str, Any] | None = None
         self.router: str | None = None
         self.active_until = 0.0
+        self.background = lambda: False   # set by the runtime: live capture running?
         self.lock = threading.Lock()
         self._stop = threading.Event()
         self._router_checked = 0.0
@@ -158,14 +161,19 @@ class WifiMonitor:
         self.active_until = time.time() + ACTIVE_FOR
 
     @property
-    def active(self) -> bool:
+    def watched(self) -> bool:
         return time.time() < self.active_until
+
+    @property
+    def active(self) -> bool:
+        return self.watched or bool(self.background())
 
     def _run(self) -> None:
         while not self._stop.is_set():
             started = time.time()
             self.sample_once()
-            self._stop.wait(max(0.2, INTERVAL - (time.time() - started)))
+            every = INTERVAL if (self.watched or self.demo) else BACKGROUND_INTERVAL
+            self._stop.wait(max(0.2, every - (time.time() - started)))
 
     def sample_once(self) -> None:
         now = time.time()

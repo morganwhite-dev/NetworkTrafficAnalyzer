@@ -288,7 +288,7 @@ export class WifiView {
     this.linkRow.replaceChildren(...chips);
     this.note.textContent =
       msg.active || msg.demo
-        ? `Pinging your router${msg.router ? ` (${msg.router})` : ""} and ${msg.target} every 2 s while this tab is open.`
+        ? `Pinging your router${msg.router ? ` (${msg.router})` : ""} and ${msg.target} every 2 s while this tab is open, and every 5 s during a live capture so you get an alert when it's slow.`
         : "Starting the check…";
 
     // Tiles

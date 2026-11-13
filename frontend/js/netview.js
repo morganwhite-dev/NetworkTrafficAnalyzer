@@ -20,6 +20,7 @@ import {
   SLAB_Z,
   slabGeometry,
   slabLabelChars,
+  wrapName,
   slabPoint,
   TOP_INTERNET,
 } from "./netlayout.js";
@@ -324,7 +325,10 @@ export class NetView {
     if (this.tab === "wifi") return;
     const v = this.view;
     const parts = [
-      el("span", { text: `${v.counts?.hosts ?? 0} HOSTS` }),
+      el("span", {
+        text: `${v.counts?.lan ?? 0} DEVICES · ${v.counts?.internet ?? 0} SERVERS`,
+        "data-tip": "Devices: other things on your network. Servers: places on the internet this Mac talked to.",
+      }),
       el("span", { class: "dot", text: "·" }),
       el("span", { text: fmtRate(v.total_bps) }),
     ];
@@ -448,7 +452,7 @@ export class NetView {
     const g = this.geom;
     const { items, selfW, gwW } = this.layoutMap();
     const inetCount = v.counts?.internet ?? 0;
-    this.colHead.textContent = `INTERNET · ${inetCount} HOST${inetCount === 1 ? "" : "S"}`;
+    this.colHead.textContent = `INTERNET · ${inetCount} SERVER${inetCount === 1 ? "" : "S"}`;
     // A small slab has no room for the subnet along its edge.
     this.slabLabel.textContent = `HOME NETWORK${v.network && g.S >= 300 ? ` · ${v.network}` : ""}`;
 
@@ -634,11 +638,14 @@ export class NetView {
             ? this.displayName(h)
             : h.name || h.ip || "";
     let sub;
+    // Rate and share both cover the last minute, so a busy server never reads "0 B/s".
+    const avg = h.avg_bps ?? h.bps;
     if (it.key === "self" || it.key === "gw") sub = h.ip || "";
-    else if (it.others) sub = fmtRate(h.bps);
+    else if (it.others) sub = fmtRate(avg);
     else if (it.zone === "column" && sev) sub = h.reason || "";
     else if (it.zone === "column")
-      sub = [h.cc, fmtRate(h.bps), fmtPct(h.share)].filter(Boolean).join(" · ");
+      sub = [h.app || h.cc, fmtRate(avg), fmtPct(h.share)].filter(Boolean).join(" · ");
+    else if (h.own_name && h.maker) sub = h.maker;
     else sub = h.ip;
     // Labels on the slab share a row with their neighbours: size them to the gap.
     // This Mac and the router sit alone on their row, so they can use the full width.
@@ -661,24 +668,36 @@ export class NetView {
           svg("text", { class: "node-sub", x, y: 10, text: truncate(sub, 34) }),
         );
       } else {
+        // A bare address never wraps (it would break at a dot): shorten it in the middle.
+        const lines =
+          name === h.ip ? [fitMiddle(name, room.name)] : wrapName(name, room.name);
         n.labels.replaceChildren(
-          svg("text", {
-            class: "node-label",
-            x: 0,
-            y: 26,
-            "text-anchor": "middle",
-            text: truncate(name, room.name),
-          }),
+          ...lines.map((line, i) =>
+            svg("text", {
+              class: "node-label",
+              x: 0,
+              y: 26 + i * 13,
+              "text-anchor": "middle",
+              text: line,
+            }),
+          ),
           svg("text", {
             class: "node-sub",
             x: 0,
-            y: 39,
+            y: 39 + (lines.length - 1) * 13,
             "text-anchor": "middle",
             text: fitMiddle(sub, room.sub),
           }),
         );
       }
     }
+  }
+
+  /** Every address of the device or server at `ip` (a merged device has several). */
+  addrsFor(ip) {
+    const v = this.view;
+    const lan = (v?.lan || []).find((x) => x.ip === ip || x.addrs?.includes(ip));
+    return lan?.addrs?.length ? lan.addrs : [ip];
   }
 
   /** Two devices both called "iPhone" become "iPhone 1" and "iPhone 2" (ordered by address). */
@@ -696,10 +715,12 @@ export class NetView {
     if (!v || !ip) return ip;
     if (v.self?.ip === ip || v.self?.addrs?.includes(ip)) return "This Mac";
     if (v.gateway?.ip === ip) return "Gateway";
-    const lan = (v.lan || []).find((x) => x.ip === ip);
+    if (v.gateway?.addrs?.includes(ip)) return "Gateway";
+    const lan = (v.lan || []).find((x) => x.ip === ip || x.addrs?.includes(ip));
     if (lan) return lan.name && lan.name !== ip ? this.displayName(lan) : ip;
     const h = (v.internet || []).find((x) => x.ip === ip);
-    return h?.name && h.name !== ip ? h.name : ip;
+    if (h?.name && h.name !== ip) return h.name;
+    return v.names?.[ip] || ip;
   }
 
   /** Rectangles the callout tags must stay clear of (the internet column). */
@@ -945,7 +966,7 @@ export class NetView {
       r.rateT.textContent =
         sev && h.reason
           ? truncate(h.reason, 30)
-          : `${fmtRate(h.bps)}${h.cc ? ` · ${h.cc}` : ""}`;
+          : [fmtRate(h.avg_bps ?? h.bps), h.app || h.cc].filter(Boolean).join(" · ");
       r.shareT.setAttribute("x", right);
       r.shareT.setAttribute("y", 6);
       r.shareT.textContent = fmtPct(h.share);
@@ -1147,9 +1168,11 @@ export class NetView {
     const grid = el(
       "div",
       { class: "hc-grid" },
-      el("span", { text: "Rate" }),
+      el("span", { text: "Right now" }),
       el("b", { text: fmtRate(h.bps) }),
-      el("span", { text: "Share 60 s" }),
+      el("span", { text: "Last minute" }),
+      el("b", { text: fmtRate(h.avg_bps ?? h.bps) }),
+      el("span", { text: "Share" }),
       el("b", { text: fmtPct(h.share) }),
       el("span", { text: "Packets" }),
       el("b", { text: String(h.packets ?? "—") }),

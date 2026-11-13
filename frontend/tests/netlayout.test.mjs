@@ -92,3 +92,11 @@ test("fitMiddle keeps both ends of an address", () => {
   assert.equal(fitMiddle("abcdef", 2), "ab");
   assert.equal(fitMiddle(null, 5), "");
 });
+
+test("long device names wrap onto two lines instead of being cut off", async () => {
+  const { wrapName } = await import("../js/netlayout.js");
+  assert.deepEqual(wrapName("iPhone", 10), ["iPhone"]);
+  assert.deepEqual(wrapName("Office-Printer", 10), ["Office-", "Printer"]);
+  assert.deepEqual(wrapName("Living-Room-TV", 12), ["Living-Room-", "TV"]);
+  assert.equal(wrapName("Averyveryverylongname", 8).length, 2);
+});

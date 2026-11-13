@@ -1,7 +1,7 @@
 // Virtualized packet table: fixed 24px rows, only the visible window is in the DOM.
 
 import { el } from "./format.js";
-import { protoTip } from "./glossary.js";
+import { plainInfo, protoTip } from "./glossary.js";
 
 const ROW = 24;
 const OVERSCAN = 12;
@@ -190,11 +190,11 @@ export class PacketTable {
       .join(" ");
     const rel = this.baseTs !== null ? (r.t - this.baseTs).toFixed(3) : "";
     // Show the names the map uses; the raw address stays in the hover text.
-    const raw = (ip, port) => (port != null ? `${ip}:${port}` : ip);
-    const show = (ip, port) => {
-      const name = this.labelFor(ip);
-      return port != null ? `${name}:${port}` : name;
-    };
+    // IPv6 addresses take brackets before a port, or "::10:443" can't be told apart.
+    const raw = (ip, port) =>
+      port != null ? `${ip.includes(":") ? `[${ip}]` : ip}:${port}` : ip;
+    // Names only: the port is in the hover text and the inspector.
+    const show = (ip) => this.labelFor(ip);
     const src = show(r.src, r.sport);
     const dst = show(r.dst, r.dport);
     const srcRaw = raw(r.src, r.sport);
@@ -211,7 +211,11 @@ export class PacketTable {
         "data-tip": protoTip(r.proto),
       }),
       el("span", { class: "r num", text: r.len }),
-      el("span", { class: "info", text: r.info, title: r.info }),
+      el("span", {
+        class: "info",
+        text: plainInfo(r, this.labelFor),
+        title: r.info,
+      }),
     );
     node.style.transform = `translateY(${idx * ROW}px)`;
     return node;

@@ -19,6 +19,21 @@ A flagged host turns red on the map (amber for medium) and stays that way for 5 
 | **Rogue IPv6 router**      | more than one router advertisement source within 10 minutes                                                                                                         | high                                                                                | the newest router                           |
 | **Possible VPN leak**      | live capture on a physical interface while a `utun` VPN owns the default route, and an internet host other than the VPN server gets 5+ packets                      | high                                                                                | the host that leaked                        |
 
+## Slow network and heavy use (live capture only)
+
+These come from the Wi-Fi tab's readings, which keep running every 5 s during a live capture (every 2 s while the tab is open), and from this Mac's own traffic. Each one says whether **this Mac** is the cause. They live in `backend/app/health.py`.
+
+| Alert                     | Fires when                                                                                                       | Severity                                                      |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| **Slow Wi-Fi**            | the Wi-Fi check says "weak signal" or "busy" for 10 s (router 40 ms+ or losing 5%+ of pings)                     | medium                                                        |
+| **Slow internet**         | the router answers quickly but the internet past it is 120 ms+ slower, or drops 3%+ of pings, for 10 s           | medium                                                        |
+| **Wi-Fi hiccups**         | the router spikes to 50 ms+ twice or more in a minute, for 10 s                                                  | low                                                           |
+| **Heavy bandwidth use**   | this Mac moves 3 MB/s+ for 15 s. It names the app (from `lsof`, your own apps only) and the server               | medium if the network got slower at the same time, else low |
+
+"This Mac is the cause" means it is moving 2 MB/s+ (or half its Wi-Fi link) at the time. Each alert is marked **ENDED** once things have been normal for 20 s (heavy use: under 1 MB/s for 10 s); if it comes back within 10 minutes the same alert opens again. Traffic spikes and bandwidth hogs are marked ended too, with their peak numbers.
+
+The Mac can only see its own traffic on Wi-Fi, so "not this Mac" means "the network, or another device on it": the app can't tell which other device.
+
 ## Tuning
 
 The thresholds live as plain numbers at the top of each check in [`backend/app/detectors.py`](../backend/app/detectors.py). The tests in `backend/tests/test_detectors.py` feed crafted traffic through every detector, including "normal browsing is not a scan" and "CDN names aren't tunneling", so you can change a number and see what breaks.

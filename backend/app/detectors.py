@@ -61,12 +61,13 @@ class Alert:
     detail: dict[str, Any] = field(default_factory=dict)
     secret: str | None = None
     packet_id: int | None = None
+    ended: float | None = None       # when the problem stopped (None: still going, or a one-off)
 
     def to_dict(self) -> dict[str, Any]:
         return {"id": self.id, "ts": self.ts, "severity": self.severity, "kind": self.kind,
                 "title": self.title, "reason": self.reason, "hosts": self.hosts,
                 "detail": self.detail, "packet_id": self.packet_id,
-                "has_secret": self.secret is not None}
+                "has_secret": self.secret is not None, "ended": self.ended}
 
 
 class AlertBook:
@@ -88,9 +89,14 @@ class AlertBook:
             # Same incident still going: refresh its numbers instead of raising a new alert.
             existing = self.by_key.get(key)
             if existing is not None and existing.id in self.by_id:
-                if (existing.reason, existing.detail) != (reason, extra.get("detail", {})):
+                worse = SEVERITY_RANK[severity] > SEVERITY_RANK[existing.severity]
+                if (existing.reason, existing.detail) != (reason, extra.get("detail", {})) \
+                        or existing.ended is not None or worse:
                     existing.reason = reason
                     existing.detail = extra.get("detail", existing.detail)
+                    existing.ended = None          # it came back: the same alert is live again
+                    if worse:
+                        existing.severity, existing.title = severity, title
                     if existing not in self.fresh and existing not in self.updated:
                         self.updated.append(existing)
                 self.refreshed = existing
@@ -112,8 +118,22 @@ class AlertBook:
         self.fresh.append(alert)
         return alert
 
+    def end(self, key: tuple, ts: float, reason: str | None = None) -> Alert | None:
+        """Mark an ongoing alert as over, so the list can say "ended" instead of showing
+        numbers that look current."""
+        a = self.by_key.get(key)
+        if a is None or a.id not in self.by_id or a.ended is not None:
+            return None
+        a.ended = ts
+        if reason:
+            a.reason = reason
+        if a not in self.fresh and a not in self.updated:
+            self.updated.append(a)
+        return a
+
     def active(self, now: float, window: float = FLAG_HOLD) -> list[Alert]:
-        live = [a for a in self.items if now - a.ts <= window and SEVERITY_RANK[a.severity] >= 2]
+        live = [a for a in self.items if now - a.ts <= window and SEVERITY_RANK[a.severity] >= 2
+                and (a.ended is None or now - a.ended < 30)]
         live.sort(key=lambda a: (SEVERITY_RANK[a.severity], a.ts), reverse=True)
         seen, out = set(), []
         for a in live:
@@ -151,6 +171,8 @@ class Engine:
         self.baseline_mean: float | None = None
         # hog
         self.hog_streak: Counter[str] = Counter()
+        self.hog_peak: dict[str, tuple[float, float]] = {}   # ip -> (peak rate, share then)
+        self.spike_peak = 0
         # arp / ndp
         self.ip_mac: dict[str, str] = {}
         self.mac_changes: dict[str, deque] = {}
@@ -427,6 +449,7 @@ class Engine:
         if is_spike:
             self.spike_run += 1
             if self.spike_run >= 5:
+                self.spike_peak = max(self.spike_peak, total)
                 top = self.hosts.top_talker(sec + 1)
                 pct = (total / mean - 1) * 100 if mean else 0
                 self._raise(("spike",), float(sec), "medium", "traffic_spike", "Traffic spike",
@@ -434,7 +457,11 @@ class Engine:
                             [top.ip] if top else [], cooldown=180, flag=[],
                             detail={"bps": total, "baseline": mean})
         else:
+            if self.spike_run >= 5 and self.spike_peak:
+                self.book.end(("spike",), float(sec),
+                              f"peaked at {fmt_rate(self.spike_peak)} · back to normal")
             self.spike_run = 0
+            self.spike_peak = 0
             if len(self.base) == self.base.maxlen:
                 old = self.base[0]
                 self.base_sum -= old
@@ -448,6 +475,8 @@ class Engine:
         now = sec + 1
         total10 = self.hosts.total_in_window(now - 1, 10)
         if total10 <= 0:
+            for ip in list(self.hog_streak):
+                self._hog_over(ip, sec)
             self.hog_streak.clear()
             return
         top = self.hosts.top_talker(now - 1, 10)
@@ -458,19 +487,35 @@ class Engine:
         if share >= 0.6 and rate >= 2_000_000:
             self.hog_streak[top.ip] += 1
         else:
-            self.hog_streak.pop(top.ip, None)
+            if self.hog_streak.pop(top.ip, None):
+                self._hog_over(top.ip, sec)
             return
         for ip in [k for k in self.hog_streak if k != top.ip]:
             del self.hog_streak[ip]
+            self._hog_over(ip, sec)
         if self.hog_streak[top.ip] >= 10:
             known = top.kind == "internet" and self.hosts.is_known_service(top.ip)
             total_rate = total10 / 10
             vs = ((total_rate / self.baseline_mean - 1) * 100
                   if self.baseline_mean and self.baseline_mean > 0 else None)
+            peak = self.hog_peak.get(top.ip, (0.0, 0.0))
+            if rate > peak[0]:
+                self.hog_peak[top.ip] = (rate, share)
             self._raise(("hog", top.ip), float(sec), "info" if known else "high",
                         "bandwidth_hog", "Bandwidth hog",
                         f"{fmt_rate(rate)} · {share * 100:.0f}% of traffic", [top.ip],
                         cooldown=300, detail={"bps": rate, "share": share, "vs_normal": vs})
+
+
+    def _hog_over(self, ip: str, sec: int) -> None:
+        peak = self.hog_peak.pop(ip, None)
+        if peak is None:
+            return
+        a = self.book.end(("hog", ip), float(sec),
+                          f"peaked at {fmt_rate(peak[0])} · {peak[1] * 100:.0f}% of traffic")
+        h = self.hosts.hosts.get(ip)
+        if a is not None and h is not None and h.alert_id == a.id:
+            h.flagged_until = min(h.flagged_until, sec + 30.0)   # stop looking red soon after
 
 
 def now() -> float:

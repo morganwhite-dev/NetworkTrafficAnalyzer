@@ -263,7 +263,7 @@ select {
   color: var(--text);
   appearance: none;
   cursor: pointer;
-  max-width: 220px;
+  max-width: 280px;
   background-image:
     linear-gradient(45deg, transparent 50%, var(--text-2) 50%),
     linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
@@ -1504,7 +1504,7 @@ dialog .actions {
 .tile-label { display: flex; align-items: center; justify-content: space-between; font-size: 10px;
   letter-spacing: 0.1em; color: var(--text-dim); }
 .tile-value { font-size: 20px; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
-.tile-sub { font-size: 11px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-sub { font-size: 11px; color: var(--text-2); line-height: 1.35; }
 .tile.is-warn .tile-value, .tile.q-fair .tile-value { color: var(--warn); }
 .tile.is-bad .tile-value, .tile.q-weak .tile-value { color: var(--alert-text); }
 .tile.q-strong .tile-value, .tile.q-good .tile-value { color: var(--data); }
@@ -2209,4 +2209,28 @@ body:has(.drawer[data-open="true"]) main {
 .prow .dst:hover {
   text-decoration: underline;
   text-decoration-color: var(--hi);
+}
+
+/* ---------- ended alerts and slow-network tips ---------- */
+.alert-row.is-ended .bar {
+  background: var(--text-3);
+}
+.alert-row.is-ended .sev {
+  opacity: 0.55;
+}
+.alert-row .ended {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  padding: 0 4px;
+  flex: none;
+}
+.alert-row .explain .tips {
+  margin: 2px 0 0;
+  padding-left: 14px;
+  color: var(--text-2);
+}
+.alert-row .explain .tips li {
+  margin: 2px 0;
 }

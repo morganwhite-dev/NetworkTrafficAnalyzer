@@ -103,6 +103,8 @@ export class Charts {
           y: {
             border: { display: false },
             beginAtZero: true,
+            // With nothing captured yet the scale would read "1 B/s, 0 B/s, 0 B/s".
+            suggestedMax: 1000,
             ticks: { maxTicksLimit: 4, callback: (v) => fmtRate(v) },
           },
         },

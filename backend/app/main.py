@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import __version__, ipinfo
+from .apps import AppMap
 from .capture import LiveCapture, Replayer
 from .config import FRONTEND_DIR, Settings
 from .geoip import GeoResolver
@@ -48,6 +49,7 @@ class Runtime:
     replay_loop: bool | None = None    # None: follow --loop
     replayer: Replayer | None = None
     wifi: WifiMonitor | None = None
+    apps: AppMap | None = None
     launch_url: str | None = None
     upload_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     mode_lock: asyncio.Lock = field(default_factory=asyncio.Lock)   # serialises source switches
@@ -88,12 +90,15 @@ def create_app(rt: Runtime) -> FastAPI:
     s = rt.settings
     rt.hub.status_provider = rt.status
     rt.hub.wifi = rt.wifi
+    rt.hub.capturing = lambda: rt.capturing
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: FastAPI):
         tasks = [asyncio.create_task(rt.hub.run()), asyncio.create_task(rt.geo.run())]
         if rt.wifi:
             rt.wifi.start()
+        if rt.apps:
+            rt.apps.start()
         if rt.replay_file and rt.replay_auto:
             start_replay(rt)
         elif rt.settings.autostart:
@@ -112,6 +117,8 @@ def create_app(rt: Runtime) -> FastAPI:
             rt.pipeline.close()
             if rt.wifi:
                 rt.wifi.stop()
+            if rt.apps:
+                rt.apps.stop()
             shutil.rmtree(rt.workdir, ignore_errors=True)
 
     app = FastAPI(title="Network Traffic Analyzer", version=__version__, docs_url=None,

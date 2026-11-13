@@ -18,9 +18,11 @@ from typing import Any
 
 from scapy.all import Packet
 
+from . import ipinfo
 from .config import Settings
 from .detectors import AlertBook, Engine
-from .geoip import GeoResolver
+from .geoip import GeoResolver, short_org
+from .health import HealthWatch
 from .hosts import HostTracker
 from .parser import (
     CLEARTEXT_LOGIN_PORTS,
@@ -47,8 +49,13 @@ class Pipeline:
         self.stats = Stats()
         self.hosts = HostTracker(settings.max_hosts)
         self.hosts.geo_lookup = self._geo_cached
+        self.hosts.owner_lookup = self._owner_of
+        self.apps = None              # AppMap, set by the runtime (live mode only)
+        self.hosts.app_lookup = self._app_of
         self.alerts = AlertBook(settings.max_alerts)
         self.engine = Engine(self.hosts, self.alerts)
+        self.health = HealthWatch(self.engine)
+        self.wifi = None              # WifiMonitor, set by the runtime
         self.inbox: deque = deque()
         self.dropped = 0
         self.kernel_recv = 0          # packets the kernel handed to the capture socket
@@ -127,6 +134,13 @@ class Pipeline:
     def _geo_cached(self, addr: str) -> dict[str, Any] | None:
         return self.geo.get(addr)
 
+    def _owner_of(self, addr: str) -> str:
+        # The offline table first; else what an earlier click on the address found out.
+        return self.geo.owner(addr) or short_org(ipinfo.cached_owner(addr))
+
+    def _app_of(self, addr: str) -> str:
+        return self.apps.get(addr) if (self.apps is not None and self.mode == "live") else ""
+
     def now(self) -> float:
         return self.clock if self.mode == "file" else time.time()
 
@@ -134,6 +148,15 @@ class Pipeline:
         with self.lock:
             if self.mode in ("live", "replay"):
                 self.engine.advance(time.time())
+
+    def health_check(self, wifi: dict[str, Any]) -> None:
+        """Once a second during a live capture: raise or end the slow-network alerts."""
+        with self.lock:
+            if self.mode != "live":
+                return
+            now = time.time()
+            mac_bps = self.hosts.total_in_window(now, 10) / 10
+            self.health.check(now, wifi, mac_bps)
 
     def take_outbox(self) -> tuple[list[dict[str, Any]], int, list[dict[str, Any]]]:
         with self.lock:
@@ -223,10 +246,13 @@ class Pipeline:
         """What the app has seen of one address: kind, name, traffic, first seen."""
         with self.lock:
             now = self.now()
-            h = self.hosts.hosts.get(ip)
-            if h is None:
-                return {"kind": self.hosts.kind_of(ip), "name": self.hosts.names.get(ip, "")}
-            return self.hosts.describe(h, now, self.hosts.total_in_window(now, 60))
+            group = self.hosts.group_of(ip)
+            if not group:
+                return {"kind": self.hosts.kind_of(ip), "name": self.hosts.names.get(ip, ""),
+                        "owner": self.hosts.owner_of(ip), "app": self.hosts.app_of(ip)}
+            # The clicked address first, then the device's other addresses.
+            group.sort(key=lambda h: h.ip != ip)
+            return self.hosts.describe_group(group, now, self.hosts.total_in_window(now, 60))
 
     def inspect(self, pid: int) -> dict[str, Any] | None:
         with self.lock:
@@ -272,6 +298,7 @@ class Pipeline:
             vpn = self.engine.vpn
             self.engine = Engine(self.hosts, self.alerts)
             self.engine.vpn = vpn
+            self.health = HealthWatch(self.engine)
             self.out_rows.clear()
             self.dropped = 0
             self.kernel_drop_base = self.kernel_drop

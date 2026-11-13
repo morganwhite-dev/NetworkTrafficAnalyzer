@@ -64,9 +64,9 @@
   </header>
 
   <div class="firstrun" id="firstrun" hidden>
-    <span><b>New here?</b> Green means normal and red means look at this. Click any device, server or alert to
-      see its packets. Press <b>Demo</b> to watch it react to made-up trouble. Alerts make a sound; the
-      speaker icon mutes them.</span>
+    <span><b>New here?</b> Red means look at this. Click any device, server or alert to find out what it
+      is. When your Wi-Fi or internet gets slow you'll get an alert that says whether this Mac is the
+      cause. Alerts make a sound; the speaker icon mutes them.</span>
     <button class="btn" id="firstrun-guide" type="button">Open the guide</button>
     <button class="btn" id="firstrun-dismiss" type="button">Got it</button>
   </div>
@@ -170,8 +170,8 @@
         <div class="panel__body">
           <div class="ptable">
             <div class="ptable__head" role="row">
-              <span data-tip="Seconds since the capture started">Time (s)</span><span data-tip="Who sent it. Names come from the map; hover a row for the raw address.">From</span><span data-tip="Who it was sent to">To</span><span data-tip="What kind of traffic it is. Hover a protocol in the Protocols panel for what each means.">Proto</span>
-              <span class="r" data-tip="Size of the packet in bytes">Size</span><span data-tip="The technical details of this packet">Info</span>
+              <span data-tip="Seconds since the capture started">Time (s)</span><span data-tip="Who sent it. Hover for the raw address and port.">From</span><span data-tip="Who it was sent to">To</span><span data-tip="What kind of traffic it is. Hover a protocol in the Protocols panel for what each means.">Proto</span>
+              <span class="r" data-tip="Size of the packet in bytes">Size</span><span data-tip="What this packet is doing, in plain words. Hover a row for the technical line.">What's happening</span>
             </div>
             <div class="ptable__scroll" id="ptable-scroll" role="grid" aria-label="Captured packets">
               <div class="ptable__spacer" id="ptable-spacer"></div>

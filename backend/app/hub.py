@@ -34,6 +34,7 @@ class Hub:
         self.clients: set[Client] = set()
         self.status_provider = None  # callable returning the /api/status dict
         self.wifi = None             # WifiMonitor, when enabled
+        self.capturing = lambda: False   # set by the runtime
 
     def broadcast(self, message: dict[str, Any]) -> None:
         if not self.clients:
@@ -64,6 +65,9 @@ class Hub:
         if self.pipeline.mode in ("live", "replay"):
             bps = self.pipeline.stats_message().get("bps")
         return self.wifi.message(bps)  # type: ignore[union-attr]
+
+    def _health(self) -> None:
+        self.pipeline.health_check(self.wifi_message())
 
     async def serve(self, ws: WebSocket) -> None:
         await ws.accept()
@@ -116,6 +120,8 @@ class Hub:
                 self.broadcast({"type": kind, "alert": a})
             if n % 5 == 0:
                 await asyncio.to_thread(self.pipeline.tick)
+                if self.wifi is not None and self.pipeline.mode == "live" and self.capturing():
+                    await asyncio.to_thread(self._health)
                 if self.clients:
                     self.broadcast(await asyncio.to_thread(self.pipeline.stats_message))
                     self.broadcast(await asyncio.to_thread(self.pipeline.netview_message))

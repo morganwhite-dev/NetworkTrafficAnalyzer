@@ -88,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     # Heavy imports after argument parsing so --help is instant.
     import uvicorn
 
+    from .apps import AppMap
     from .capture import LiveCapture, open_capture_socket
     from .geoip import GeoResolver
     from .hub import Hub
@@ -129,13 +130,20 @@ def main(argv: list[str] | None = None) -> int:
                   f"privileges were not dropped.{RESET}")
     s.data_dir = default_data_dir() if not os.environ.get("NTA_DATA_DIR") else s.data_dir
 
-    geo = GeoResolver(s.geo, s.geo_db, s.data_dir)
+    geo = GeoResolver(s.geo, s.geo_db, s.data_dir, s.asn_db)
     pipeline = Pipeline(s, geo)
     live = LiveCapture(pipeline, s.port, s.promisc)
     live.preopened.update(preopened)
     live.iface = iface
     rt = Runtime(s, geo, pipeline, live, Hub(pipeline), privilege=privilege)
     rt.wifi = WifiMonitor(target=s.wifi_target)
+    # Both only run during a live capture: the pings so a slow network raises an alert,
+    # the app lookup so servers and alerts can say which app is using them.
+    rt.wifi.background = lambda: rt.pipeline.mode == "live" and rt.capturing
+    rt.apps = AppMap()
+    rt.apps.active = lambda: rt.pipeline.mode == "live" and rt.capturing
+    pipeline.apps = rt.apps
+    pipeline.wifi = rt.wifi
 
     if s.replay:
         if not s.replay.exists():

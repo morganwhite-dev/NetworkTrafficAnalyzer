@@ -20,14 +20,14 @@ def test_this_mac_and_the_router_are_named_plainly():
     me = ipinfo.explain("192.168.1.23", {"kind": "self"}, None, None, "private")
     assert me["title"] == "This Mac" and "your Mac" in me["summary"]
     gw = ipinfo.explain("192.168.1.1", {"kind": "gateway"}, None, None, "private")
-    assert gw["title"] == "Your router" and "connects your home network" in gw["summary"]
+    assert gw["title"] == "Your router" and "connects your network" in gw["summary"]
 
 
 def test_a_home_device_uses_the_name_the_app_saw():
     d = ipinfo.explain("192.168.1.77", {"kind": "lan", "name": "Living-Room-TV",
                                         "mac": "02:00:00:00:00:77"}, None, None, "private")
     assert d["title"] == "Living-Room-TV"
-    assert "home network" in d["summary"]
+    assert "device on your network" in d["summary"]
     labels = {f["label"]: f["value"] for f in d["facts"]}
     assert labels["Hardware address"] == "02:00:00:00:00:77"
     assert "private address" in labels["Address"]
@@ -86,7 +86,7 @@ def test_endpoint_never_goes_online_for_a_private_address(authed, monkeypatch):
     monkeypatch.setattr(ipinfo, "fetch_owner", boom)
     monkeypatch.setattr(ipinfo, "reverse_name", boom)
     body = authed.get("/api/ip/192.168.1.50").json()
-    assert body["status"] == "private" and "home network" in body["summary"]
+    assert body["status"] == "private" and "on your network" in body["summary"]
     assert authed.get("/api/ip/fe80::1").json()["status"] == "private"
 
 

@@ -5,10 +5,11 @@ import {
   ALERT_INFO, alertInfo, alertNumbers, PANEL_TIPS, plainSummary, PROTO_TIPS, protoTip, SEVERITY_TIPS,
 } from "../js/glossary.js";
 
-// Every `kind` the detectors can raise (backend/app/detectors.py).
+// Every `kind` the detectors can raise (backend/app/detectors.py and health.py).
 const KINDS = [
   "port_scan", "host_sweep", "cleartext_credentials", "cleartext_session", "traffic_spike",
   "bandwidth_hog", "arp_spoof", "mac_change", "dns_tunnel", "rogue_dhcp", "rogue_ra", "vpn_leak",
+  "slow_wifi", "slow_internet", "wifi_hiccups", "heavy_use",
 ];
 
 test("every alert kind explains what it means and what to do", () => {
@@ -60,4 +61,19 @@ test("alert numbers come from the alert's own detail", () => {
   assert.deepEqual(creds.map((n) => n.value), ["password", "none"]);
   assert.deepEqual(alertNumbers({ kind: "mac_change", detail: {} }), []);
   assert.deepEqual(alertNumbers({ kind: "bandwidth_hog" }), []);
+});
+
+test("packet rows read as plain words, with the technical line kept for the hover", async () => {
+  const { plainInfo } = await import("../js/glossary.js");
+  const tcp = (info) => plainInfo({ proto: "TCP", info });
+  assert.equal(tcp("443 → 64898 [ACK] seq=1 ack=2 win=750 len=0"), "“Got it”: confirming data arrived");
+  assert.equal(tcp("51000 → 443 [SYN] seq=1 win=65535 len=0"), "Opening a connection");
+  assert.equal(tcp("443 → 51000 [ACK, PSH] seq=1 ack=2 win=1 len=418"), "Data · 418 bytes");
+  assert.equal(plainInfo({ proto: "TLS", info: "Client Hello · zoom.us" }),
+               "Starting a secure connection to zoom.us");
+  assert.equal(plainInfo({ proto: "DNS", info: "Query A github.com" }), "Looking up github.com");
+  assert.equal(plainInfo({ proto: "DNS", info: "Response A github.com → 140.82.112.3" },
+                         (ip) => (ip === "140.82.112.3" ? "GitHub" : ip)),
+               "github.com is at GitHub");
+  assert.equal(plainInfo({ proto: "Other", info: "something odd" }), "something odd");
 });

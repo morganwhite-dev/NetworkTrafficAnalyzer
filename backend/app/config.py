@@ -13,6 +13,7 @@ FRONTEND_DIR = REPO_ROOT / "frontend"
 MIN_TOKEN_LEN = 16
 DEMO_PCAP = REPO_ROOT / "samples" / "demo.pcap"   # bundled demo, offered by the Live/Demo toggle
 DEFAULT_GEO_DB = REPO_ROOT / "data" / "dbip-city-lite.mmdb"
+DEFAULT_ASN_DB = REPO_ROOT / "data" / "dbip-asn-lite.mmdb"   # who runs each address (optional)
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -38,6 +39,7 @@ class Settings:
     replay_speed: float = 1.0
     geo: str = "auto"  # auto | dbip | ip-api | off
     geo_db: Path = DEFAULT_GEO_DB
+    asn_db: Path = DEFAULT_ASN_DB
     data_dir: Path = field(default_factory=default_data_dir)
     token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
     allow_remote: bool = False

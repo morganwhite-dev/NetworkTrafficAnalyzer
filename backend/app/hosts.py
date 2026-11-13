@@ -32,6 +32,52 @@ KNOWN_SERVICE = re.compile(
 PHONE = re.compile(r"(iphone|ipad|android|pixel|galaxy|phone)", re.IGNORECASE)
 TV = re.compile(r"(tv|roku|chromecast|firetv|fire-tv|bravia|webos|tizen|shield)", re.IGNORECASE)
 COMPUTER = re.compile(r"(macbook|imac|mac-mini|laptop|desktop|-pc|windows)", re.IGNORECASE)
+TV_MAKER = re.compile(r"(roku|vizio|tcl|hisense|sonos|lg electronics|bravia)", re.IGNORECASE)
+
+# Words dropped from a maker's registered name: "Samsung Electronics Co.,Ltd" -> "Samsung".
+_MAKER_TAIL = re.compile(
+    r"([,.]|\b(inc|corp|corporation|co|ltd|llc|limited|gmbh|bv|b\.v|ag|sa|plc|technologies|"
+    r"technology|electronics|international|communications|lighting|foundation|"
+    r"semiconductor|systems|holdings|group|mobile|computer|devices)\b).*$",
+    re.IGNORECASE,
+)
+
+
+# Names that aren't names: placeholders, and the random strings some phones send.
+JUNK_NAME = re.compile(r"^(none|null|unknown|localhost|\(none\)|\*|-|[0-9a-f]{12,}|"
+                       r"android-[0-9a-f]{8,})$", re.IGNORECASE)
+
+
+def real_name(name: str | None) -> str:
+    return "" if not name or JUNK_NAME.match(name.strip()) else name
+
+
+def mac_is_private(mac: str | None) -> bool:
+    """Phones and laptops make up a random hardware address for privacy (the "locally
+    administered" bit). Its maker can't be looked up."""
+    if not mac or len(mac) < 2:
+        return False
+    try:
+        return bool(int(mac[:2], 16) & 0x02)
+    except ValueError:
+        return False
+
+
+def maker_of(mac: str | None) -> str:
+    """Who made a device, from the first half of its hardware address (offline table that
+    ships with Scapy). Short form: "Apple", "Samsung", "Amazon"."""
+    if not mac or mac_is_private(mac):
+        return ""
+    try:
+        from scapy.data import MANUFDB
+        name = MANUFDB._get_manuf(mac) if MANUFDB else ""   # noqa: SLF001 - public in practice
+    except Exception:  # noqa: BLE001
+        return ""
+    if not name or name.lower() == mac.lower()[:8] or ":" in name:
+        return ""
+    short = _MAKER_TAIL.sub("", name).strip(" -,.")
+    short = short.replace(".com", "").strip() or name
+    return " ".join(short.split()[:2])[:24]
 
 
 def _ip(addr: str | None) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -108,6 +154,8 @@ class HostTracker:
         self._votes: Counter[str] = Counter()
         self._gw_mac_votes: Counter[str] = Counter()
         self.geo_lookup = None  # set by the pipeline: ip -> dict | None
+        self.owner_lookup = None  # set by the pipeline: ip -> "Apple" | "" (offline ASN table)
+        self.app_lookup = None    # set by the pipeline: ip -> "Outlook" | "" (live mode only)
 
     # ---------- configuration ----------
     def configure(self, self_ips: set[str], networks: list[str], gateway: str | None) -> None:
@@ -117,9 +165,11 @@ class HostTracker:
         self.auto = not self_ips
 
     def reset(self) -> None:
-        keep = (self.self_ips, self.networks, self.gateway, self.auto, self.geo_lookup)
+        keep = (self.self_ips, self.networks, self.gateway, self.auto, self.geo_lookup,
+                self.owner_lookup, self.app_lookup)
         self.__init__(self.max_hosts)
-        self.self_ips, self.networks, self.gateway, self.auto, self.geo_lookup = keep
+        (self.self_ips, self.networks, self.gateway, self.auto, self.geo_lookup,
+         self.owner_lookup, self.app_lookup) = keep
         if self.auto:
             self.self_ips, self.networks, self.gateway = set(), [], None
 
@@ -269,11 +319,42 @@ class HostTracker:
 
     # ---------- views ----------
     def name_of(self, h: Host) -> str:
+        """The name the device or server gave itself (DHCP, mDNS, DNS, TLS), if any."""
         if h.kind == "self":
             return "This Mac"
-        if h.mac and h.mac in self.mac_names:
+        if h.mac and real_name(self.mac_names.get(h.mac)):
             return self.mac_names[h.mac]
-        return self.names.get(h.ip, "")
+        name = real_name(self.names.get(h.ip, ""))
+        if not name and h.mac and h.kind == "lan":
+            # Another address of the same device may have announced a name.
+            for other in self.hosts.values():
+                if other.mac == h.mac and other is not h and real_name(self.names.get(other.ip)):
+                    return self.names[other.ip]
+        return name
+
+    def owner_of(self, addr: str) -> str:
+        return (self.owner_lookup(addr) or "") if self.owner_lookup else ""
+
+    def app_of(self, addr: str) -> str:
+        return (self.app_lookup(addr) or "") if self.app_lookup else ""
+
+    def label_of(self, h: Host) -> str:
+        """What to call it on screen: its own name, else who runs it or made it."""
+        name = self.name_of(h)
+        if name or h.kind in ("self", "gateway"):
+            return name
+        if h.kind == "internet":
+            owner = self.owner_of(h.ip)
+            if owner:
+                return owner
+            app = self.app_of(h.ip)
+            return f"{app} server" if app else ""
+        if h.kind == "lan":
+            if mac_is_private(h.mac):
+                return "Private device"
+            maker = maker_of(h.mac)
+            return f"{maker} device" if maker else ""
+        return ""
 
     def device_of(self, h: Host) -> str:
         if h.kind == "self":
@@ -289,6 +370,10 @@ class HostTracker:
             return "tv"
         if COMPUTER.search(name):
             return "laptop"
+        if TV_MAKER.search(maker_of(h.mac)):
+            return "tv"
+        if mac_is_private(h.mac):
+            return "phone"      # random addresses are almost always phones, tablets or laptops
         return "unknown"
 
     def is_known_service(self, addr: str) -> bool:
@@ -311,10 +396,17 @@ class HostTracker:
         geo = self.geo_lookup(h.ip) if (self.geo_lookup and h.kind == "internet") else None
         return {
             "ip": h.ip,
-            "name": self.name_of(h),
+            "addrs": [h.ip],
+            "name": self.label_of(h),
+            "own_name": self.name_of(h),
             "kind": h.kind,
             "device": self.device_of(h),
+            "owner": self.owner_of(h.ip) if h.kind == "internet" else "",
+            "app": self.app_of(h.ip) if h.kind == "internet" else "",
+            "maker": maker_of(h.mac) if h.kind in ("lan", "gateway") else "",
+            "private_mac": mac_is_private(h.mac) if h.kind == "lan" else False,
             "bps": h.bytes_in_window(now, RATE_WINDOW) / RATE_WINDOW,
+            "avg_bps": b60 / WINDOW,                 # same window as `share`, so they agree
             "share": (b60 / total60) if total60 else 0.0,
             "bytes60": b60,
             "packets": h.packets,
@@ -333,13 +425,67 @@ class HostTracker:
             "spark": [h.secs.get(s, 0) for s in range(end - WINDOW + 1, end + 1)],
         }
 
+    def device_groups(self, lan: list[Host]) -> list[list[Host]]:
+        """One device often shows up under several addresses (IPv4, a link-local IPv6 and one
+        or two global IPv6 ones). Group them by hardware address, IPv4 first."""
+        groups: dict[str, list[Host]] = {}
+        for h in lan:
+            groups.setdefault(h.mac or h.ip, []).append(h)
+        out = []
+        for members in groups.values():
+            members.sort(key=lambda h: (_ip(h.ip) is None or _ip(h.ip).version != 4, h.ip))
+            out.append(members)
+        return out
+
+    def group_of(self, addr: str) -> list[Host]:
+        h = self.hosts.get(addr)
+        if h is None:
+            return []
+        if h.kind != "lan" or not h.mac:
+            return [h]
+        return [x for x in self.hosts.values() if x.kind == "lan" and x.mac == h.mac] or [h]
+
+    def describe_group(self, members: list[Host], now: float, total60: int) -> dict[str, Any]:
+        d = self.describe(members[0], now, total60)
+        if len(members) == 1:
+            return d
+        rest = [self.describe(m, now, total60) for m in members[1:]]
+        for k in ("bps", "avg_bps", "share", "bytes60", "packets", "bytes_in", "bytes_out"):
+            d[k] = d[k] + sum(r[k] for r in rest)
+        d["spark"] = [sum(v) for v in zip(d["spark"], *(r["spark"] for r in rest), strict=False)]
+        d["first"] = min([d["first"], *(r["first"] for r in rest)])
+        d["last"] = max([d["last"], *(r["last"] for r in rest)])
+        d["addrs"] = [m.ip for m in members]
+        if not d["own_name"]:
+            named = next((r for r in rest if r["own_name"]), None)
+            if named:
+                d["name"] = d["own_name"] = named["own_name"]
+                d["device"] = named["device"]
+        worst = max([d, *rest], key=lambda r: SEVERITY_RANK.get(r["severity"] or "", -1))
+        for k in ("severity", "title", "reason", "alert_id"):
+            d[k] = worst[k]
+        return d
+
     def netview(self, now: float) -> dict[str, Any]:
         total60 = self.total_in_window(now, WINDOW)
         sev = lambda h: SEVERITY_RANK.get(h.severity or "", -1)  # noqa: E731
         hosts = list(self.hosts.values())
-        lan = [h for h in hosts if h.kind == "lan"]
+        gw = self.hosts.get(self.gateway) if self.gateway else None
+        gw_mac = ((gw.mac if gw else None) or self.mac_of.get(self.gateway or "")
+                  or self.gateway_mac)
+        # The router's own IPv6 addresses belong to the router, not to a second device.
+        lan = [h for h in hosts if h.kind == "lan" and not (gw_mac and h.mac == gw_mac)]
         internet = [h for h in hosts if h.kind == "internet"]
-        lan.sort(key=lambda h: (sev(h) >= 2, h.bytes_in_window(now, WINDOW), h.last), reverse=True)
+        devices = self.device_groups(lan)
+
+        def gsev(g: list[Host]) -> int:
+            return max(sev(h) for h in g)
+
+        def gbytes(g: list[Host]) -> int:
+            return sum(h.bytes_in_window(now, WINDOW) for h in g)
+
+        devices.sort(key=lambda g: (gsev(g) >= 2, gbytes(g), max(h.last for h in g)),
+                     reverse=True)
         internet.sort(key=lambda h: h.bytes_in_window(now, WINDOW), reverse=True)
         flagged_inet = [h for h in internet if sev(h) >= 2]
         top_inet = flagged_inet[:TOP_INTERNET]
@@ -351,7 +497,6 @@ class HostTracker:
         top_inet.sort(key=lambda h: h.bytes_in_window(now, WINDOW), reverse=True)
         rest = [h for h in internet if h not in top_inet]
         rest_bytes = sum(h.bytes_in_window(now, WINDOW) for h in rest)
-        gw = self.hosts.get(self.gateway) if self.gateway else None
         me = next(iter(sorted(self.self_ips)), None)
         flagged = [h for h in hosts if sev(h) >= 2]
         return {
@@ -361,16 +506,32 @@ class HostTracker:
                      "addrs": sorted(self.self_ips),     # every address of this Mac, v4 and v6
                      "bps": self.total_in_window(now, RATE_WINDOW) / RATE_WINDOW,
                      "severity": None} if me else None,
-            "gateway": self.describe(gw, now, total60) if gw else (
+            "gateway": {**self.describe(gw, now, total60),
+                        "addrs": [gw.ip, *(h.ip for h in hosts if h.kind == "lan" and gw_mac
+                                           and h.mac == gw_mac)]} if gw else (
                 {"ip": self.gateway, "name": "", "kind": "gateway", "device": "router", "bps": 0,
                  "share": 0, "severity": None, "spark": []} if self.gateway else None),
-            "lan": [self.describe(h, now, total60) for h in lan[:TOP_LAN]],
-            "lan_more": max(0, len(lan) - TOP_LAN),
+            "lan": [self.describe_group(g, now, total60) for g in devices[:TOP_LAN]],
+            "lan_more": max(0, len(devices) - TOP_LAN),
             "internet": [self.describe(h, now, total60) for h in top_inet],
             "others": {"count": len(rest), "bps": sum(h.bytes_in_window(now, RATE_WINDOW)
                                                        for h in rest) / RATE_WINDOW,
+                       "avg_bps": rest_bytes / WINDOW,
                        "share": (rest_bytes / total60) if total60 else 0.0},
-            "counts": {"hosts": len(lan) + len(internet) + (1 if gw else 0), "lan": len(lan),
-                       "internet": len(internet), "flagged": len(flagged)},
+            "counts": {"hosts": len(devices) + len(internet) + (1 if gw else 0),
+                       "lan": len(devices), "internet": len(internet),
+                       "flagged": len(flagged)},
             "total_bps": self.total_in_window(now, RATE_WINDOW) / RATE_WINDOW,
+            # Labels for servers that aren't on the map, so the packet list can use them too.
+            "names": self.recent_labels(rest, now),
         }
+
+    def recent_labels(self, hosts: list[Host], now: float, limit: int = 400) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for h in sorted(hosts, key=lambda h: h.last, reverse=True):
+            if len(out) >= limit or h.last < now - 600:
+                break
+            label = self.label_of(h)
+            if label:
+                out[h.ip] = label
+        return out

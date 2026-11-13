@@ -89,6 +89,26 @@ export const ALERT_INFO = {
       "Your VPN is on, but some traffic is going out around it, so it isn't protected.",
     todo: "Check your VPN's kill switch or leak-protection setting, or reconnect it.",
   },
+  slow_wifi: {
+    means:
+      "The Wi-Fi between this Mac and the router is slow: the router takes too long to answer, or misses some of the checks.",
+    todo: "See the tips above. The Wi-Fi tab shows the live numbers.",
+  },
+  slow_internet: {
+    means:
+      "Your Wi-Fi is fine, but the internet past the router is slow. The problem is the modem or your provider.",
+    todo: "See the tips above. If it lasts, check your provider's status page.",
+  },
+  wifi_hiccups: {
+    means:
+      "Most of the time the Wi-Fi is quick, but now and then the router takes a long time to answer. Those moments are when pages hang and calls freeze.",
+    todo: "Usually another device grabbing the Wi-Fi in bursts, or interference. Moving closer to the router helps.",
+  },
+  heavy_use: {
+    means:
+      "This Mac is moving a lot of data, enough to slow the connection for everything else on it.",
+    todo: "Fine if you're downloading or streaming on purpose. If not, quit or pause the app named above.",
+  },
 };
 
 export const PANEL_TIPS = {
@@ -107,15 +127,32 @@ export const PANEL_TIPS = {
  * The headline numbers for an alert, shown big at the top of its expanded row:
  * [{ value, label, red? }]. Built from the alert's `detail`, so they update in place.
  */
+function ms(v) {
+  return v == null ? "—" : `${Math.round(v)} ms`;
+}
+
 export function alertNumbers(alert, labelFor = (ip) => ip) {
   const d = alert.detail || {};
   const out = [];
   switch (alert.kind) {
     case "bandwidth_hog":
-      if (d.bps != null) out.push({ value: fmtRate(d.bps), label: "now", red: true });
+      if (d.bps != null) out.push({ value: fmtRate(d.bps), label: alert.ended ? "last" : "now", red: !alert.ended });
       if (d.share != null) out.push({ value: fmtPct(d.share), label: "of traffic" });
       if (d.vs_normal != null)
         out.push({ value: `+${Math.round(d.vs_normal)}%`, label: "vs normal" });
+      break;
+    case "slow_wifi":
+    case "slow_internet":
+    case "wifi_hiccups":
+      out.push({ value: ms(d.gw_ms), label: "router", red: alert.kind === "slow_wifi" });
+      out.push({ value: ms(d.net_ms), label: "internet", red: alert.kind === "slow_internet" });
+      if (d.mac_bps != null)
+        out.push({ value: fmtRate(d.mac_bps), label: "this Mac uses", red: !!d.this_mac });
+      break;
+    case "heavy_use":
+      if (d.bps != null) out.push({ value: fmtRate(d.bps), label: "this Mac", red: true });
+      if (d.peak != null) out.push({ value: fmtRate(d.peak), label: "peak" });
+      if (d.of_link != null) out.push({ value: fmtPct(d.of_link), label: "of Wi-Fi link" });
       break;
     case "port_scan":
       if (d.ports != null) out.push({ value: String(d.ports), label: "ports probed", red: true });
@@ -126,7 +163,7 @@ export function alertNumbers(alert, labelFor = (ip) => ip) {
       out.push({ value: "none", label: "encryption" });
       break;
     case "traffic_spike":
-      if (d.bps != null) out.push({ value: fmtRate(d.bps), label: "now", red: true });
+      if (d.bps != null) out.push({ value: fmtRate(d.bps), label: alert.ended ? "last" : "now", red: !alert.ended });
       if (d.baseline != null) out.push({ value: fmtRate(d.baseline), label: "normal" });
       break;
     case "dns_tunnel":
@@ -157,6 +194,51 @@ const WHAT = {
 export function plainSummary(row, labelFor = (ip) => ip) {
   const what = WHAT[row.proto] || `${row.proto} traffic`;
   return `${labelFor(row.src)} sent ${what} to ${labelFor(row.dst)}.`;
+}
+
+const FLAG_WORDS = [
+  [/^SYN$/, "Opening a connection"],
+  [/^SYN, ACK$/, "Accepting a connection"],
+  [/FIN/, "Closing the connection"],
+  [/RST/, "Connection cut off"],
+];
+
+/**
+ * What a packet is doing, in a few plain words, for the packet list. The technical
+ * line stays in the hover text and the inspector.
+ */
+export function plainInfo(row, labelFor = (ip) => ip) {
+  const info = String(row.info || "");
+  const m = info.match(/\[([A-Z, ]+)\].*len=(\d+)/);
+  if (row.proto === "TCP" && m) {
+    const [, flags, len] = m;
+    for (const [re, words] of FLAG_WORDS) if (re.test(flags)) return words;
+    if (Number(len) > 0) return `Data · ${Number(len).toLocaleString()} bytes`;
+    return "“Got it”: confirming data arrived";
+  }
+  let x;
+  if ((x = info.match(/^Client Hello · (.+)$/))) return `Starting a secure connection to ${x[1]}`;
+  if ((x = info.match(/^Application Data · (\d+) bytes$/)))
+    return `Encrypted data · ${Number(x[1]).toLocaleString()} bytes`;
+  if (/^Handshake/.test(info)) return "Setting up encryption";
+  if (/^Change Cipher Spec/.test(info)) return "Switching on encryption";
+  if (/^Alert/.test(info)) return "Encryption notice (often a goodbye)";
+  if (info === "QUIC Initial") return "Starting a fast encrypted connection";
+  if (info === "QUIC short header") return "Encrypted data (QUIC)";
+  if ((x = info.match(/^Query \S+ (.+)$/))) return `Looking up ${x[1]}`;
+  if ((x = info.match(/^Response \S+ (\S+) · no such name/))) return `${x[1]} doesn't exist`;
+  if ((x = info.match(/^Response \S+ (\S+) → (\S+)/))) return `${x[1]} is at ${labelFor(x[2])}`;
+  if ((x = info.match(/^Response \S+ (\S+)/))) return `Answer about ${x[1]}`;
+  if (/^Echo request/.test(info)) return "Ping: are you there?";
+  if (/^Echo reply/.test(info)) return "Ping reply: yes";
+  if ((x = info.match(/^Neighbor Solicitation · who has (\S+)/)))
+    return `Who has ${labelFor(x[1])}?`;
+  if (/^Neighbor Advertisement/.test(info)) return "“That's me” (address answer)";
+  if (/^Router Advertisement/.test(info)) return "Router announcing itself";
+  if (row.proto === "mDNS" || row.proto === "SSDP") return "A device announcing itself";
+  if (row.proto === "UDP" && (x = info.match(/len=(\d+)/)))
+    return `Quick message · ${Number(x[1]).toLocaleString()} bytes`;
+  return info;
 }
 
 /** Wording for the protocol tooltip, falling back to nothing for unknown names. */

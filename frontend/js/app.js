@@ -95,7 +95,7 @@ const net = new NetView({
 // ------------------------------------------------------------------ "what is this?" card
 const ipCard = new IpCard({
   onShowPackets: (ip) => {
-    applyFilter(`ip == ${ip}`);
+    applyFilter(ipFilter(ip));
     ipCard.hide();
   },
   onClose: () => focusHost(null),
@@ -270,6 +270,14 @@ filterInput.addEventListener("keydown", (ev) => {
   }
 });
 
+/** `ip == a or ip == b` for every address of the device (one phone can have three). */
+function ipFilter(ip) {
+  return net
+    .addrsFor(ip)
+    .map((a) => `ip == ${a}`)
+    .join(" or ");
+}
+
 function focusHost(ip) {
   if (!ip) {
     ipCard.hide();
@@ -280,7 +288,7 @@ function focusHost(ip) {
   }
   // Clicking an address tells you what it is. The packets are filtered and waiting in the
   // drawer (the card's button opens it), so a click never covers the map by itself.
-  applyFilter(`ip == ${ip}`, false);
+  applyFilter(ipFilter(ip), false);
   net.select(ip);
   geomap.select(ip);
   ipCard.show(ip);
@@ -366,6 +374,8 @@ function renderModeToggle() {
 function renderDemoStrip(s) {
   const strip = $("demo-strip");
   strip.hidden = s.mode !== "replay";
+  // One banner at a time: the demo strip replaces the first-run tip while it shows.
+  $("firstrun").hidden = !strip.hidden || firstRunDismissed();
   if (strip.hidden) return;
   const demo = s.source === "demo.pcap";
   $("demo-strip-text").replaceChildren(

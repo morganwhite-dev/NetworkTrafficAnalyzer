@@ -223,3 +223,15 @@ export function ribbons(rows, W, H, opts = {}) {
     rowH,
   };
 }
+
+/** A device name on one line, or two when it is too long ("Office-" / "Printer"). */
+export function wrapName(s, n) {
+  const str = String(s ?? "");
+  if (str.length <= n) return [str];
+  const cut = Math.max(
+    ...[" ", "-", "_", "."].map((c) => str.lastIndexOf(c, n - 1)),
+  );
+  const at = cut >= Math.floor(n / 3) ? cut + 1 : n;
+  const rest = str.slice(at).trim();
+  return [str.slice(0, at).trim(), rest.length > n ? `${rest.slice(0, n - 1)}…` : rest];
+}
