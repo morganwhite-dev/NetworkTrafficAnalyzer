@@ -154,6 +154,7 @@ class HostTracker:
         self._votes: Counter[str] = Counter()
         self._gw_mac_votes: Counter[str] = Counter()
         self.geo_lookup = None  # set by the pipeline: ip -> dict | None
+        self.own_mac: str | None = None  # learnt from traffic (macOS hides it from apps)
         self.owner_lookup = None  # set by the pipeline: ip -> "Apple" | "" (offline ASN table)
         self.app_lookup = None    # set by the pipeline: ip -> "Outlook" | "" (live mode only)
 
@@ -273,8 +274,27 @@ class HostTracker:
             self.hosts.move_to_end(addr)
         return h
 
+    def _learn_self(self, f: Facts) -> None:
+        """macOS rotates "temporary" IPv6 addresses, so this Mac has addresses the capture
+        didn't know about when it started. Anything sent from or to this Mac's hardware
+        address is this Mac, whichever IP it uses."""
+        if not self.own_mac and f.src in self.self_ips and f.src_mac \
+                and f.src_mac != "ff:ff:ff:ff:ff:ff":
+            self.own_mac = f.src_mac
+        if not self.own_mac:
+            return
+        for addr, mac in ((f.src, f.src_mac), (f.dst, f.dst_mac)):
+            if mac != self.own_mac or not addr or addr in self.self_ips:
+                continue
+            ip = _ip(addr)
+            if ip is None or ip.is_multicast or ip.is_unspecified or ip.is_loopback:
+                continue
+            self.self_ips.add(addr)
+            self.hosts.pop(addr, None)       # it was counted as another device until now
+
     def observe(self, f: Facts) -> None:
         self._learn(f)
+        self._learn_self(f)
         if self.auto:
             if not self.self_ips:
                 self._infer_self(f)

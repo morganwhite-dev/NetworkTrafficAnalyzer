@@ -20,7 +20,6 @@ pictures before you publish them anyway.
 from __future__ import annotations
 
 import io
-import json
 import os
 import sys
 import time
@@ -30,7 +29,7 @@ from PIL import Image
 from playwright.sync_api import Page, sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from record_demo import PRIVACY_JS, Traffic, own_addresses  # noqa: E402
+from record_demo import EXTRA_JS, PRIVACY_JS, Traffic, own_addresses  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "screenshots"
@@ -40,45 +39,6 @@ SCALE = float(os.environ.get("NTA_SHOT_SCALE", "1.5"))
 IFACE = os.environ.get("NTA_IFACE", "en0")
 SPEED_TEST = os.environ.get("NTA_SPEED_TEST", "1") != "0"
 
-# Private addresses and hardware addresses, anywhere in a piece of text.
-PRIV_SOURCE = (r"(^|[^0-9a-f:])(10\.\d|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|fe80:"
-               r"|[0-9a-f]{1,2}(:[0-9a-f]{1,2}){5})")
-
-# The parts of the dashboard that are newer than the recorder's filter: the address card,
-# the Wi-Fi tab, and the labels under This Mac and the router.
-EXTRA_JS = """
-(() => {
-  if (window.__extraPrivacy) return;
-  window.__extraPrivacy = true;
-  const PRIV = new RegExp(PRIV_SOURCE, 'i');
-  const own = () => (window.__own || []).map((x) => x.toLowerCase());
-  const blur = (el, on) => el.classList.toggle('pn-blur', !!on);
-  // This Mac's and the router's addresses under their labels: a style rule, so a label the
-  // map has just redrawn is never visible for a frame.
-  const st = document.createElement('style');
-  st.textContent = '.node[data-key="self"] .node-sub, .node[data-key="gw"] .node-sub'
-    + '{filter:blur(7px)!important}';
-  document.head.append(st);
-  const risky = (t) => PRIV.test(t) || own().some((x) => t.toLowerCase().includes(x))
-    || (window.__keys || []).some((k) => k && t.includes(k));
-  const run = () => {
-    for (const n of document.querySelectorAll('.node[data-key="self"], .node[data-key="gw"]'))
-      for (const t of n.querySelectorAll('.node-sub')) blur(t, true);
-    const sel = '.ipcard__ip, .ipcard__summary, .ipcard__facts dd, .tile-sub, .wifi-note, '
-      + '.verdict, .wifi-help dd, .alert-row .why, .alert-row .explain span, .hc-sub, '
-      + '.hovercard div, .prow .info, .insp-body .meta, .chip, #nv-stat';
-    for (const el of document.querySelectorAll(sel)) blur(el, risky(el.textContent || ''));
-    // A card about another device names it in the title: hide the whole card.
-    const card = document.querySelector('.ipcard');
-    if (card && !card.hidden) {
-      const title = card.querySelector('.ipcard__title')?.textContent || '';
-      blur(card, (window.__keys || []).some((k) => k && title.includes(k)));
-    }
-  };
-  setInterval(run, 120);
-  run();
-})();
-""".replace("PRIV_SOURCE", json.dumps(PRIV_SOURCE))
 
 
 def wait_for(page: Page, js: str, timeout: float = 120) -> bool:

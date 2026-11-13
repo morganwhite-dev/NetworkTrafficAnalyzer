@@ -11,7 +11,7 @@
 
 Every picture here is a live capture of my own Mac. Other people's devices, my addresses and hardware addresses are blurred.
 
-**[Watch the 90-second demo video](docs/demo/network-traffic-analyzer-demo.mp4)**: also recorded live (it shows an earlier version of the layout).
+**[Watch the 90-second demo video](docs/demo/network-traffic-analyzer-demo.mp4)**: also recorded live, with the same blurring.
 
 **Jump to:** [Features](#features) · [Run it](#get-it-running-on-macos) · [Docker](#docker-optional) · [Screenshots](#screenshots) · [Filters](#filter-cheat-sheet) · [Documentation](#documentation) · [Project structure](#project-structure)
 

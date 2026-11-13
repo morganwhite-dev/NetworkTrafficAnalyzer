@@ -284,3 +284,15 @@ def test_downloads_and_uploads_are_each_measured_against_their_own_speed():
     assert m["peak"] == 26_000_000                  # both directions together...
     assert round(m["peak_load"], 2) == 0.96         # ...but never "176% full"
     assert m["now_load"] < 0.01
+
+
+def test_a_new_temporary_ipv6_address_of_this_mac_is_still_this_mac(pipe):
+    # Learns this Mac's hardware address from its IPv4 traffic...
+    feed(pipe, tcp(SELF, "17.57.146.20", 50000, 443, "A"), T0)
+    # ...so a temporary IPv6 address macOS made up later is recognised as this Mac too.
+    v6 = (Ether(src=MAC_SELF, dst=MAC_GW) / IPv6(src="2607:b940::71dc", dst="2620:149::f")
+          / UDP(sport=5000, dport=443))
+    feed(pipe, v6, T0 + 1)
+    view = pipe.hosts.netview(T0 + 2)
+    assert "2607:b940::71dc" in view["self"]["addrs"]
+    assert view["counts"]["lan"] == 0

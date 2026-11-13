@@ -7,18 +7,23 @@
        NTA_URL=http://localhost:8004 NTA_TOKEN=live-recording-4821xyz \
          .venv/bin/python scripts/record_demo.py
 
+During warm-up it runs the Wi-Fi tab's speed test once (about 20 s and a few hundred MB;
+NTA_SPEED_TEST=0 skips it), so the slow-network alert in the video is real.
+
 Writes docs/demo/network-traffic-analyzer-demo.mp4 (H.264, from a raw .webm in
 docs/demo/raw/). Uses the installed Google Chrome through Playwright and ffmpeg.
 
 Privacy: this records a real network. While recording, the page blurs the names and addresses
-of OTHER devices on the Wi-Fi, this Mac's interface address, and the hex dump (it contains
-hardware MAC addresses). Internet hostnames are real and stay visible. Always watch the result
+of OTHER devices on the Wi-Fi, this Mac's and the router's addresses, hardware addresses, the
+hex dump, and anything private on the address card and the Wi-Fi tab. Internet hostnames
+are real and stay visible. Always watch the result
 before posting it.
 """
 
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
 import subprocess
 import sys
@@ -36,6 +41,7 @@ BASE = os.environ.get("NTA_URL", "http://localhost:8004")
 TOKEN = os.environ.get("NTA_TOKEN", "")
 W, H = 1920, 1080
 IFACE = os.environ.get("NTA_IFACE", "en0")   # only used to know which addresses to look for
+SPEED_TEST = os.environ.get("NTA_SPEED_TEST", "1") != "0"
 
 OVERLAY_JS = """
 (() => {
@@ -146,7 +152,9 @@ PRIVACY_JS = """
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) continue;
       const low = t.toLowerCase();
-      for (const x of own) if (low.includes(x)) window.__leaks.push(`own address ${x}: ${t}`);
+      for (const x of own) {
+        if (low.includes(x)) window.__leaks.push(`own address ${x} in .${el.className}: ${t}`);
+      }
       for (const k of bad) if (k && low.includes(k)) window.__leaks.push(`device ${k}: ${t}`);
     }
   };
@@ -162,6 +170,53 @@ PRIVACY_JS = """
   run();
 })();
 """
+
+# Private addresses and hardware addresses, anywhere in a piece of text.
+PRIV_SOURCE = (r"(^|[^0-9a-f:])(10\.\d|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|fe80:"
+               r"|[0-9a-f]{1,2}(:[0-9a-f]{1,2}){5})")
+
+# The newer parts of the dashboard: the address card, the Wi-Fi tab, and the labels
+# under This Mac and the router. Shared with scripts/capture_screenshots.py.
+EXTRA_JS = """
+(() => {
+  if (window.__extraPrivacy) return;
+  window.__extraPrivacy = true;
+  const PRIV = new RegExp(PRIV_SOURCE, 'i');
+  const own = () => (window.__own || []).map((x) => x.toLowerCase());
+  const blur = (el, on) => el.classList.toggle('pn-blur', !!on);
+  // This Mac's and the router's addresses under their labels: a style rule, so a label the
+  // map has just redrawn is never visible for a frame.
+  const st = document.createElement('style');
+  st.textContent = '.node[data-key="self"] .node-sub, .node[data-key="gw"] .node-sub'
+    + '{filter:blur(7px)!important}';
+  document.head.append(st);
+  const risky = (t) => PRIV.test(t) || own().some((x) => t.toLowerCase().includes(x))
+    || (window.__keys || []).some((k) => k && t.includes(k));
+  const run = () => {
+    for (const n of document.querySelectorAll('.node[data-key="self"], .node[data-key="gw"]'))
+      for (const t of n.querySelectorAll('.node-sub')) blur(t, true);
+    const sel = '.ipcard__ip, .ipcard__title, .ipcard__summary, .ipcard__facts dd, .tile-sub, '
+      + '.wifi-note, .prow .src, .prow .dst, '
+      + '.verdict, .wifi-help dd, .alert-row .why, .alert-row .explain span, .hc-sub, '
+      + '.hovercard div, .prow .info, .insp-summary .meta, .insp-note, .fields .v, .chip, '
+      + '#nv-stat, .drawer__filter, #filter-chip-slot, .slab-label';
+    for (const el of document.querySelectorAll(sel)) blur(el, risky(el.textContent || ''));
+    // A card about another device names it in the title, and the cards for This Mac and the
+    // router name the internet provider and the city: hide those cards whole.
+    const card = document.querySelector('.ipcard');
+    if (card && !card.hidden) {
+      const title = card.querySelector('.ipcard__title')?.textContent || '';
+      blur(card, (window.__keys || []).some((k) => k && title.includes(k))
+        || /^(This Mac|Your router)$/.test(title.trim()));
+    }
+  };
+  // Straight after every change too, so a card or row is never readable for a frame.
+  new MutationObserver(run).observe(document.body,
+    {subtree: true, childList: true, characterData: true});
+  setInterval(run, 120);
+  run();
+})();
+""".replace("PRIV_SOURCE", json.dumps(PRIV_SOURCE))
 
 SITES = [
     "https://en.wikipedia.org/wiki/Computer_network",
@@ -288,7 +343,8 @@ class Director:
                 const b = r.getBoundingClientRect();
                 // fully inside the visible part of the list, clear of the header and the caption
                 if (b.height && b.top > box.top + 40 && b.bottom < box.bottom - 90) {
-                  return [b.x + 200, b.y + b.height / 2];
+                  // the size/description side: clicking an address would open its card
+                  return [b.x + b.width * 0.72, b.y + b.height / 2];
                 }
               }
               return null;
@@ -333,7 +389,8 @@ def wait_for(page: Page, js: str, timeout: float = 150) -> None:
     raise TimeoutError(js)
 
 
-HOSTS_OK = "parseInt(document.querySelector('#nv-stat')?.textContent) >= 15"
+HOSTS_OK = ("parseInt((document.querySelector('#nv-stat')?.textContent || '')"
+            ".match(/(\\d+) SERVERS/)?.[1] || 0) >= 15")
 HAS_HTTP = ("[...document.querySelectorAll('.protolegend span')]"
             ".some(s => /HTTP/.test(s.textContent))")
 
@@ -370,6 +427,13 @@ def main() -> int:
         wait_for(wp, HAS_HTTP, timeout=90)
         wp.click("#tab-wifi")     # starts the Wi-Fi pings so readings exist when we get there
         time.sleep(12)
+        if SPEED_TEST:
+            # A real speed test: it fills the connection, so the slow-network alert and the
+            # speed-limit line in the video are real too.
+            print("Warm-up: running the speed test…", flush=True)
+            wp.locator(".wifi-speed .btn").click()
+            wait_for(wp, "!document.querySelector('.wifi-speed .btn')?.disabled", 120)
+            time.sleep(15)
         state = warm.storage_state()
         warm.close()
 
@@ -383,6 +447,7 @@ def main() -> int:
         page.evaluate("a => { window.__own = a; }", own_addresses(IFACE))
         page.evaluate(OVERLAY_JS)
         page.evaluate(PRIVACY_JS)
+        page.evaluate(EXTRA_JS)
         page.mouse.move(960, 540)
         d = Director(page)
         d.at("start")
@@ -422,14 +487,18 @@ def main() -> int:
         d.pause(1.3)
         d.caption(None)
 
-        # Scene 3: packets (26-46s)
+        # Scene 3: what is this? and its packets (26-48s)
         d.at("scene 3")
-        d.caption("Click any server on the map: the packet details slide up, filtered to it")
+        d.caption("Click any server: a plain-English card says who runs it and which app uses it")
         d.hover_public_node(1.0)
         d.pause(0.4)
         page.mouse.down()
         d.pause(0.06)
         page.mouse.up()
+        d.pause(3.6)
+        d.caption("“Show its packets” opens the packet details, filtered to that server")
+        if not d.click(".ipcard .btn-start", 0.9):
+            page.keyboard.press("Escape")
         d.pause(1.3)
         if page.locator("#drawer-body").is_hidden():     # never film a closed drawer
             d.click("#drawer-toggle", 0.8)
@@ -453,12 +522,17 @@ def main() -> int:
         found = page.locator("#alerts .alert-row")
         if found.count():
             what = (found.first.locator(".what").text_content() or "an alert").lower()
-            d.caption(f"Security monitoring: it flagged a real {what} on this network")
+            if "slow" in what:
+                d.caption("When the internet gets slow, an alert says why, and whether "
+                          "this Mac is the cause")
+            else:
+                d.caption(f"Security monitoring: it flagged a real {what} on this network")
             d.move("#alerts", 1.0)
             d.pause(1.0)
-            d.click("#alerts .alert-row .info-btn", 0.9)
-            d.caption("Plain-English details: the numbers, what it means, what to do")
-            d.pause(4.0)
+            if found.first.locator(".explain").is_hidden():
+                d.click("#alerts .alert-row .info-btn", 0.9)
+            d.caption("Plain-English details: the numbers, is it this Mac?, what to do")
+            d.pause(4.5)
         else:
             d.caption("Security monitoring: nothing suspicious on this network right now")
             d.move("#alerts", 1.0)
@@ -473,9 +547,13 @@ def main() -> int:
                       "{behavior:'smooth', block:'start'})")
         d.pause(2.0)
         d.click("#help-close", 0.8)
-        d.caption("Wi-Fi check: signal and latency, turned into one plain answer")
+        d.caption("Wi-Fi tab: signal and latency, turned into one plain answer")
         d.tab("#tab-wifi")
-        d.pause(5.5)
+        d.pause(3.5)
+        d.caption("A speed test per network (home, campus, café) tells it how full the "
+                  "connection is")
+        d.move(".wifi-speed", 1.0)
+        d.pause(3.5)
         d.click("#tab-map", 0.8)
         d.caption(None)
 
