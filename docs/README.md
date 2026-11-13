@@ -15,5 +15,5 @@ Start with the [project README](../README.md) to run the app. These pages go dee
 
 | Folder                       | What's in it                                                                        | Made by                          |
 | ---------------------------- | ----------------------------------------------------------------------------------- | -------------------------------- |
-| [screenshots/](screenshots/) | the pictures and GIF used in the README (from the bundled demo, so no real network) | `scripts/capture_screenshots.py` |
+| [screenshots/](screenshots/) | the pictures and GIF used in the README (a live capture, with other devices and private addresses blurred) | `scripts/capture_screenshots.py` |
 | [demo/](demo/)               | the 90-second walkthrough video, recorded on a live capture                         | `scripts/record_demo.py`         |

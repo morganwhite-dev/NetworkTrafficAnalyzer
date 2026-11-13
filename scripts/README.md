@@ -25,5 +25,5 @@ Everything here is run from the project root, for example `scripts/run.sh`.
 | Script                    | Does                                                                                           |
 | ------------------------- | ---------------------------------------------------------------------------------------------- |
 | `make_demo_pcap.py`       | rebuilds `samples/demo.pcap`: 90 seconds of made-up home traffic with a password sent over HTTP, a port scan and a bandwidth hog |
-| `capture_screenshots.py`  | takes the README screenshots and GIF from a running demo (the docstring has the commands)      |
+| `capture_screenshots.py`  | takes the README screenshots and GIF from a live capture, blurring anything private (the docstring has the commands) |
 | `record_demo.py`          | records the 90-second video of the live app. It blurs other devices and checks for leaks while it records, so read its docstring before running it on your own network |

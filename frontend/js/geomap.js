@@ -117,7 +117,7 @@ export class GeoMap {
     if (arrived) this.onArrive?.();
     const countries = new Set(items.map((i) => i.cc).filter(Boolean));
     this.stat.textContent = items.length
-      ? `${items.length} HOSTS · ${countries.size} COUNTRIES`
+      ? `${items.length} SERVERS · ${countries.size} COUNTRIES`
       : "";
   }
 

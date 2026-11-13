@@ -7,15 +7,17 @@
 
 **A live look at what my Mac is actually saying on the network.** When something looks off, the part of the network that's causing it turns red.
 
-![The dashboard in demo mode: a bandwidth hog, a port-scanning smart TV and a password sent over plain HTTP, all flagged](docs/screenshots/dashboard.png)
+![The dashboard on a live capture of my Mac: the map of my network and the servers it talks to, and an alert explaining that the Wi-Fi got slow because this Mac was filling the connection](docs/screenshots/dashboard.png)
 
-**[Watch the 90-second demo video](docs/demo/network-traffic-analyzer-demo.mp4)**: recorded on a real, live capture of my own Mac, not the staged demo data above.
+Every picture here is a live capture of my own Mac. Other people's devices, my addresses and hardware addresses are blurred.
+
+**[Watch the 90-second demo video](docs/demo/network-traffic-analyzer-demo.mp4)**: also recorded live (it shows an earlier version of the layout).
 
 **Jump to:** [Features](#features) · [Run it](#get-it-running-on-macos) · [Docker](#docker-optional) · [Screenshots](#screenshots) · [Filters](#filter-cheat-sheet) · [Documentation](#documentation) · [Project structure](#project-structure)
 
 ## Why I built it
 
-I wanted to see what my Mac is actually doing on the network in real time. Wireshark can answer that, but it's a wall of packets, and I wanted something I could glance at. So I built a dashboard that captures my Mac's traffic live and draws my home network as a little 3D map: my Mac, the router, the other devices on my Wi-Fi, and every server on the internet I'm talking to. Normal traffic flows along the lines in green. When something's wrong (one server hogging the bandwidth, a device scanning my ports, a password going out without encryption), that node turns red and a card in the corner tells me what happened in plain words.
+I wanted to see what my Mac is actually doing on the network in real time. Wireshark can answer that, but it's a wall of packets, and I wanted something I could glance at. So I built a dashboard that captures my Mac's traffic live and draws my home network as a little 3D map: my Mac, the router, the other devices on my Wi-Fi, and every server on the internet I'm talking to. Normal traffic flows along the lines in green. When something's wrong (one server hogging the bandwidth, a device scanning my ports, a password going out without encryption), that node turns red and an alert tells me what happened in plain words. And when the internet feels slow, it tells me whether it's the Wi-Fi, the internet connection, or my own Mac filling the connection.
 
 ![The network map animating](docs/screenshots/demo.gif)
 
@@ -142,21 +144,21 @@ That profile uses host networking, keeps the dashboard on `127.0.0.1`, and only 
 
 ## Screenshots
 
-|                                                                                                     |                                                                                                                               |
-| --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| ![Network map](docs/screenshots/netview-map.png) **Map:** your network in 3D. Red means look here.  | ![Hover card](docs/screenshots/netview-hover.png) **Hover a host** for its rate, share, first-seen time and a 60 s sparkline. |
-| ![Flows](docs/screenshots/netview-flows.png) **Flows:** who's using your bandwidth, sized by share. | ![Alerts](docs/screenshots/alerts.png) **Alerts** in plain words: open one for the numbers, what it means and what to do.                         |
-| ![Filter](docs/screenshots/filter.png) **Filter** to one device and protocol.                       | ![Inspector](docs/screenshots/inspector.png) **Inspector** with decoded layers and a Hex/ASCII dump.                          |
-| ![World tab](docs/screenshots/netview-world.png) **World:** where the servers you talk to are. | ![Wi-Fi check](docs/screenshots/netview-wifi.png) **Wi-Fi check:** one plain answer about why it's slow (demo readings shown). |
-| ![Traffic](docs/screenshots/traffic.png) **Traffic:** bandwidth and what kind of traffic it is. | ![Packet details drawer](docs/screenshots/drawer.png) **Packet details** slides up from the bottom when you click a device or alert. |
+| | |
+| --- | --- |
+| ![Network map](docs/screenshots/netview-map.png) **Map:** this Mac, the router, the other devices on the network (blurred here) and the servers it talks to, with the app using each one. | ![What is this? card](docs/screenshots/ipcard.png) **Click anything** for a plain-English card: who runs it, where it is and what it does. |
+| ![Alerts](docs/screenshots/alerts.png) **Alerts** in plain words, including when the network is slow and whether this Mac is the cause. | ![Wi-Fi check](docs/screenshots/netview-wifi.png) **Wi-Fi tab:** signal, router and internet response times, one plain verdict, and this network's measured speed. |
+| ![Flows](docs/screenshots/netview-flows.png) **Flows:** who's using your bandwidth, sized by share. | ![Hover card](docs/screenshots/netview-hover.png) **Hover a server** for its rate right now and over the last minute, its share and a 60 s sparkline. |
+| ![Traffic](docs/screenshots/traffic.png) **Traffic:** bandwidth, how full the connection is compared with your speed test, and what kind of traffic it is. | ![World tab](docs/screenshots/netview-world.png) **World:** where the servers you talk to are. |
+| ![Packet details drawer](docs/screenshots/drawer.png) **Packet details** in plain words ("Got it": confirming data arrived), from the bottom of the window. | ![Inspector](docs/screenshots/inspector.png) **Inspector** with a plain summary, decoded layers and a Hex/ASCII dump. |
 
-Every screenshot comes from the bundled demo capture and synthetic Wi-Fi readings, so none of them show a real network. To regenerate them, start the demo with `NTA_TOKEN=demo-screenshots-0123 NTA_WIFI_DEMO=1` (tokens must be at least 16 characters) and run `scripts/capture_screenshots.py`.
+These are live captures of my Mac, taken by `scripts/capture_screenshots.py`. It blurs other devices' names and addresses, this Mac's and the router's addresses, hardware addresses and the hex dump, and it refuses to save a picture if anything private is still readable. Internet server names stay visible. To take your own: start the app with `NTA_TOKEN=live-screenshots-0123 scripts/run.sh` and run `NTA_TOKEN=live-screenshots-0123 .venv/bin/python scripts/capture_screenshots.py` (it runs the speed test once; `NTA_SPEED_TEST=0` skips it).
 
 ## Everyday uses
 
-- **Figuring out why the Wi-Fi is slow.** Open the Wi-Fi tab while it feels slow. It tells you whether it's the signal (move closer), the Wi-Fi being busy or spiky (another device or a crowded channel), or the internet past your router (modem or provider).
+- **Figuring out why the internet is slow.** During a live capture you get an alert when it gets slow, saying whether it's the signal (move closer), the Wi-Fi being busy or spiky (another device or a crowded channel), the internet past your router (modem or provider), or this Mac filling the connection (and which app). Run the speed test once on each network you use so it knows how fast that network really is.
 - **Checking for VPN leaks.** Connect your VPN and capture on `en0`. Nearly everything should go to your VPN server. Anything else gets flagged as a possible leak.
-- **Finding what's eating your bandwidth.** The Flows tab ranks every host by share. Spot the hog, click it, and the packet table filters down to that host.
+- **Finding what's eating your bandwidth.** The Flows tab ranks every server by share and names the app on your Mac using it. Spot the hog, click it, and the packet table filters down to that server.
 - **Catching logins without encryption.** Any password, token or cookie sent over plain HTTP, FTP, POP3, IMAP or SMTP shows up as a critical alert (masked until you click Reveal).
 - **Seeing what your smart devices do.** TVs, printers and speakers show up on the map with their own names, so you can see who they talk to.
 - **Analysing a `.pcap`.** Open a capture from Wireshark or `tcpdump` with "Open file" and get the same map, alerts and charts in a couple of seconds.
