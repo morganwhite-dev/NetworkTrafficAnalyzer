@@ -14,6 +14,7 @@ import {
   gridPath,
   LAN_SLOTS,
   RankHold,
+  shortHost,
   ribbons,
   screenAt,
   SELF_SLOT,
@@ -663,7 +664,7 @@ export class NetView {
             class: "node-label",
             x,
             y: -4,
-            text: truncate(name, 26),
+            text: shortHost(name, 26),
           }),
           svg("text", { class: "node-sub", x, y: 10, text: truncate(sub, 34) }),
         );
@@ -960,7 +961,7 @@ export class NetView {
       r.row.style.transform = `translate(0px, ${f(it.rowY)}px)`;
       r.nameT.setAttribute("x", xr);
       r.nameT.setAttribute("y", -3);
-      r.nameT.textContent = truncate(h.name || h.ip, 26);
+      r.nameT.textContent = shortHost(h.name || h.ip, 26);
       r.rateT.setAttribute("x", xr);
       r.rateT.setAttribute("y", 11);
       r.rateT.textContent =

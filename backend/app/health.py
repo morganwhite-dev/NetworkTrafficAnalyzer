@@ -6,7 +6,8 @@ answers the question people actually have: is it this Mac, or something else?
 
 - A slow verdict has to hold for HOLD seconds before it becomes an alert, and the alert is
   marked as ended once things have been fine for CLEAR seconds.
-- "Heavy bandwidth use" fires when this Mac moves at least HEAVY_BPS for HEAVY_HOLD seconds.
+- "Heavy bandwidth use" fires when this Mac uses half of this network's measured speed (or
+  HEAVY_BPS on a network that hasn't been speed-tested) for HEAVY_HOLD seconds.
   It names the app (from apps.py) and the server. It is amber if the network got slower
   at the same time (this Mac is filling the connection), otherwise just for information.
 """
@@ -18,8 +19,10 @@ from typing import Any
 from .detectors import Engine, fmt_rate
 
 HOLD = 10                 # seconds a slow verdict must last before alerting
+HICCUP_HOLD = 150         # hiccups come and go: only alert when they keep happening
 CLEAR = 20                # seconds of normal before an alert is marked as ended
-HEAVY_BPS = 3_000_000     # 3 MB/s (24 Mbit/s): enough to slow most home connections
+HEAVY_BPS = 3_000_000     # 3 MB/s (24 Mbit/s), when this network hasn't been speed-tested
+HEAVY_SHARE = 0.5         # ...otherwise half of its measured download speed
 HEAVY_HOLD = 15
 HEAVY_CLEAR_BPS = 1_000_000
 COOLDOWN = 600            # the same kind of slowness within 10 minutes re-opens one alert
@@ -30,6 +33,8 @@ SLOW = {
     "Your Wi-Fi is busy": ("slow_wifi", "medium", "Slow Wi-Fi: crowded"),
     "Your internet connection is slow": ("slow_internet", "medium", "Slow internet"),
     "Your Wi-Fi has hiccups": ("wifi_hiccups", "low", "Wi-Fi hiccups"),
+    "This Mac is filling the connection": ("mac_busy", "medium",
+                                           "Slow: this Mac is filling the connection"),
 }
 
 
@@ -47,6 +52,8 @@ class HealthWatch:
         self.light_for = 0
         self.heavy_peak = 0.0
         self.heavy_on = False
+        self.now_load: float | None = None     # how full the connection is (0-1), if tested
+        self.peak_load: float | None = None
 
     def _top(self, now: float) -> tuple[str, str, str]:
         """(address, server label, app) of what this Mac is talking to the most."""
@@ -56,29 +63,46 @@ class HealthWatch:
             return "", "", ""
         return top.ip, hosts.label_of(top) or top.ip, hosts.app_of(top.ip)
 
-    def blame(self, mac_bps: float, link: dict[str, Any] | None, now: float) -> tuple[bool, str]:
-        """Is this Mac the reason it's slow? (yes/no, one plain sentence)."""
+    def blame(self, mac_bps: float, link: dict[str, Any] | None, now: float,
+              limit: float | None = None, load: float | None = None) -> tuple[bool, str]:
+        """Is this Mac the reason it's slow? (yes/no, one plain sentence). `limit` is this
+        network's measured download speed in bytes/s, if it has been tested."""
         ip, server, app = self._top(now)
         what = app or server
-        capacity = (link or {}).get("tx_rate") or 0       # Wi-Fi link speed, Mbit/s
-        share = (mac_bps * 8 / 1e6) / (capacity * 0.6) if capacity else None
-        heavy = mac_bps >= 2_000_000 or (share is not None and share >= 0.5)
+        if load is None and limit:
+            load = mac_bps / limit
+        if load is not None:
+            heavy = load >= HEAVY_SHARE
+        else:
+            capacity = (link or {}).get("tx_rate") or 0       # Wi-Fi link speed, Mbit/s
+            share = (mac_bps * 8 / 1e6) / (capacity * 0.6) if capacity else None
+            heavy = mac_bps >= 2_000_000 or (share is not None and share >= 0.5)
+        of = f" ({min(load, 1.0):.0%} of this network's speed)" if load is not None else ""
         if heavy:
-            return True, (f"Yes, mostly. This Mac is moving {fmt_rate(mac_bps)}"
+            return True, (f"Yes, mostly. This Mac was moving up to {fmt_rate(mac_bps)}{of}"
                           + (f", mostly {what}" if what else "")
                           + ". Pause that download or stream and see if it clears up.")
-        return False, (f"No. This Mac is only using {fmt_rate(mac_bps)}, so the slowness is "
+        return False, (f"No. This Mac used at most {fmt_rate(mac_bps)}{of}, so the slowness is "
                        "coming from the network itself, or another device on it.")
 
-    def check(self, now: float, wifi: dict[str, Any], mac_bps: float) -> None:
+    def check(self, now: float, wifi: dict[str, Any], mac_bps: float,
+              mac_peak: float | None = None) -> None:
+        """`mac_bps`: this Mac's rate over the last 10 s. `mac_peak`: its busiest 5 s in the
+        last minute, the same minute the Wi-Fi verdict covers."""
         verdict = wifi.get("verdict") or {}
         link = wifi.get("link")
-        self._slow(now, verdict, link, mac_bps)
-        self._heavy(now, verdict, link, mac_bps)
+        # macOS's own byte counters are exact even when the capture falls behind.
+        counted = wifi.get("mac") or {}
+        mac_bps = max(mac_bps, counted.get("now") or 0.0)
+        mac_peak = max(mac_peak or 0.0, counted.get("peak") or 0.0)
+        self.now_load, self.peak_load = counted.get("now_load"), counted.get("peak_load")
+        limit = ((wifi.get("speed") or {}).get("limit") or 0) / 8 or None   # bytes/s
+        self._slow(now, verdict, link, max(mac_bps, mac_peak or 0), limit)
+        self._heavy(now, verdict, link, mac_bps, limit)
 
     # ------------------------------------------------------------- slow network
     def _slow(self, now: float, verdict: dict[str, Any], link: dict[str, Any] | None,
-              mac_bps: float) -> None:
+              mac_bps: float, limit: float | None = None) -> None:
         rule = SLOW.get(verdict.get("title", ""))
         if rule is None:
             self.slow_for = 0
@@ -89,11 +113,11 @@ class HealthWatch:
             return
         self.fine_for = 0
         self.slow_for += 1
-        if self.slow_for < HOLD:
-            return
         kind, severity, title = rule
+        if self.slow_for < (HICCUP_HOLD if kind == "wifi_hiccups" else HOLD):
+            return
         st = verdict.get("stats") or {}
-        is_mac, why = self.blame(mac_bps, link, now)
+        is_mac, why = self.blame(mac_bps, link, now, limit, self.peak_load)
         speed = (f"router spiked {st.get('gw_spikes', 0)}× in a minute"
                  if kind == "wifi_hiccups" else
                  f"router {_ms(st.get('gw_ms'))} · internet {_ms(st.get('net_ms'))}")
@@ -114,12 +138,16 @@ class HealthWatch:
 
     # ------------------------------------------------------------ heavy use
     def _heavy(self, now: float, verdict: dict[str, Any], link: dict[str, Any] | None,
-               mac_bps: float) -> None:
-        if mac_bps >= HEAVY_BPS:
+               mac_bps: float, limit: float | None = None) -> None:
+        heavy_at = max(HEAVY_SHARE * limit, 250_000) if limit else HEAVY_BPS
+        clear_at = min(heavy_at / 3, HEAVY_CLEAR_BPS)
+        load = self.now_load if self.now_load is not None else (
+            mac_bps / limit if limit else None)
+        if (load >= HEAVY_SHARE) if load is not None else (mac_bps >= heavy_at):
             self.heavy_for += 1
             self.light_for = 0
             self.heavy_peak = max(self.heavy_peak, mac_bps)
-        elif mac_bps < HEAVY_CLEAR_BPS:
+        elif (load < HEAVY_SHARE / 3) if load is not None else (mac_bps < clear_at):
             self.light_for += 1
             self.heavy_for = 0
         if self.heavy_on and self.light_for >= 10:
@@ -129,12 +157,15 @@ class HealthWatch:
             self.heavy_peak = 0.0
         if self.heavy_for < HEAVY_HOLD:
             return
+        if self.slow_key == ("slow", "mac_busy") and not self.heavy_on:
+            return      # the slow-network alert already says it's this Mac and why
         ip, server, app = self._top(now)
         slower = verdict.get("level") in ("bad", "warn")
         capacity = (link or {}).get("tx_rate") or 0
         of_link = (mac_bps * 8 / 1e6) / capacity if capacity else None
         what = f"{app} ({server})" if app and server and app not in server else (app or server)
-        reason = f"{fmt_rate(mac_bps)}" + (f" · mostly {what}" if what else "")
+        share = f" · {min(load, 1.0):.0%} of your speed" if load is not None else ""
+        reason = f"{fmt_rate(mac_bps)}{share}" + (f" · mostly {what}" if what else "")
         why = (("Yes. The network got slower while this Mac was busy, so this Mac is "
                 "filling the connection.") if slower else
                ("It could be. The network still answers quickly, so you probably won't notice, "
@@ -144,4 +175,5 @@ class HealthWatch:
             ("heavy",), now, "medium" if slower else "low", "heavy_use",
             "Heavy bandwidth use", reason, [ip] if ip else [], cooldown=COOLDOWN, flag=[],
             detail={"bps": mac_bps, "peak": self.heavy_peak, "of_link": of_link,
+                    "limit": limit, "of_limit": load,
                     "app": app, "server": server, "this_mac": True, "why": why})

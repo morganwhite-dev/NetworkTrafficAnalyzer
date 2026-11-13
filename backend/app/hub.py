@@ -63,7 +63,7 @@ class Hub:
     def wifi_message(self) -> dict[str, Any]:
         bps = None
         if self.pipeline.mode in ("live", "replay"):
-            bps = self.pipeline.stats_message().get("bps")
+            bps = self.pipeline.mac_peak()      # busiest moment of the minute the verdict covers
         return self.wifi.message(bps)  # type: ignore[union-attr]
 
     def _health(self) -> None:

@@ -25,8 +25,11 @@ import time
 from collections import deque
 from typing import Any
 
+from .speedtest import network_id
+
 PING = "/sbin/ping" if sys.platform == "darwin" else "/bin/ping"
 IPCONFIG = "/usr/sbin/ipconfig"
+NETSTAT = "/usr/sbin/netstat"
 INTERVAL = 2.0
 BACKGROUND_INTERVAL = 5.0          # during a live capture with the Wi-Fi tab closed
 HISTORY = 300                       # 10 minutes at one sample every 2 s
@@ -106,6 +109,26 @@ class CoreWlanReader:
             return None
 
 
+def iface_bytes(iface: str) -> tuple[int, int] | None:
+    """(bytes in, bytes out) on an interface, from macOS's own counters. Exact even when
+    the packet capture can't keep up with a fast download."""
+    if not re.fullmatch(r"[a-z0-9]{2,12}", iface or ""):
+        return None
+    try:
+        out = subprocess.run([NETSTAT, "-ibn", "-I", iface], capture_output=True, text=True,
+                             timeout=2, check=False).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        cols = line.split()
+        if len(cols) >= 10 and cols[0] == iface and cols[2].startswith("<Link"):
+            try:
+                return int(cols[6]), int(cols[9])
+            except ValueError:
+                return None
+    return None
+
+
 def router_for(iface: str) -> str | None:
     if sys.platform != "darwin" or not re.fullmatch(r"[a-z0-9]{2,12}", iface or ""):
         return None
@@ -146,6 +169,10 @@ class WifiMonitor:
         self.router: str | None = None
         self.active_until = 0.0
         self.background = lambda: False   # set by the runtime: live capture running?
+        self.speed = None                 # SpeedTest, set by the runtime
+        self.network: str | None = None   # this network's router hardware address
+        self._bytes: tuple[float, int, int] | None = None
+        self.rates: deque[tuple[float, float, float]] = deque(maxlen=60)  # (t, in/s, out/s)
         self.lock = threading.Lock()
         self._stop = threading.Event()
         self._router_checked = 0.0
@@ -181,6 +208,7 @@ class WifiMonitor:
         if link and link.get("connected") and now - self._router_checked > 30 and not self.demo:
             self.router = router_for(link.get("iface", "en0"))
             self._router_checked = now
+            self.network = network_id(link.get("iface", "en0"), self.router)
         if self.demo:
             self.router = "192.168.1.1"
         gw_ms = net_ms = None
@@ -198,6 +226,8 @@ class WifiMonitor:
                 for t in threads:
                     t.join(timeout=2.5)
                 gw_ms, net_ms = results.get("gw"), results.get("net")
+        if not self.demo:
+            self._count_bytes(now, (link or {}).get("iface") or "en0")
         sample = {"t": round(now, 2), "pinged": pinged, "gw": gw_ms, "net": net_ms}
         if link and link.get("connected"):
             sample.update(rssi=link["rssi"], noise=link["noise"], tx=link["tx_rate"])
@@ -205,11 +235,48 @@ class WifiMonitor:
             self.link = link
             self.samples.append(sample)
 
+    def _count_bytes(self, now: float, iface: str) -> None:
+        got = iface_bytes(iface)
+        if got is None:
+            return
+        prev, self._bytes = self._bytes, (now, *got)
+        if prev and now > prev[0] and got[0] >= prev[1] and got[1] >= prev[2]:
+            dt = now - prev[0]
+            with self.lock:
+                self.rates.append((now, (got[0] - prev[1]) / dt, (got[1] - prev[2]) / dt))
+
+    def mac_rates(self, down: float | None = None, up: float | None = None,
+                  window: float = WINDOW) -> dict[str, Any]:
+        """This Mac's traffic in the last minute: latest and busiest total (bytes/s), and,
+        when the network has been speed-tested (`down`/`up` in bytes/s), how full the
+        connection was: downloads against the download speed, uploads against the upload
+        speed, whichever is fuller."""
+        with self.lock:
+            last = self.rates[-1][0] if self.rates else 0.0
+            recent = [r for r in self.rates if last - r[0] <= window]
+        if not recent:
+            return {"now": 0.0, "peak": 0.0, "now_load": None, "peak_load": None}
+
+        def load(r: tuple[float, float, float]) -> float | None:
+            if not down:
+                return None
+            return max(r[1] / down, (r[2] / up) if up else 0.0)
+
+        loads = [x for x in (load(r) for r in recent) if x is not None]
+        return {"now": recent[-1][1] + recent[-1][2],
+                "peak": max(r[1] + r[2] for r in recent),
+                "now_load": load(recent[-1]), "peak_load": max(loads) if loads else None}
+
     # ------------------------------------------------------------------ view
     def message(self, mac_bps: float | None = None) -> dict[str, Any]:
         with self.lock:
             samples = list(self.samples)
             link = dict(self.link) if self.link else None
+        speed = self.speed.summary(self.network) if self.speed else None
+        down = ((speed or {}).get("limit") or 0) / 8 or None
+        up = ((speed or {}).get("limit_up") or 0) / 8 or None
+        mac = self.mac_rates(down, up)
+        mac_bps = max(mac_bps or 0.0, mac["peak"]) or None
         return {
             "type": "wifi",
             "demo": self.demo,
@@ -219,7 +286,9 @@ class WifiMonitor:
             "target": self.target,
             "link": link,
             "samples": samples[-150:],
-            "verdict": diagnose(samples, link, self.router, mac_bps),
+            "verdict": diagnose(samples, link, self.router, mac_bps, mac["peak_load"]),
+            "speed": speed,
+            "mac": mac,
         }
 
 
@@ -228,7 +297,10 @@ def _median(values: list[float]) -> float | None:
 
 
 def diagnose(samples: list[dict[str, Any]], link: dict[str, Any] | None,
-             router: str | None, mac_bps: float | None = None) -> dict[str, Any]:
+             router: str | None, mac_bps: float | None = None,
+             load: float | None = None) -> dict[str, Any]:
+    """`mac_bps`: this Mac's busiest moment in the last minute (bytes/s). `load`: how full
+    that made the connection (0.6 = 60% of its measured speed), if it has been tested."""
     """Turn the last minute of readings into one plain-language answer."""
     if link is not None and not link.get("connected"):
         return {"level": "info", "title": link.get("reason", "Not on Wi-Fi"),
@@ -249,7 +321,8 @@ def diagnose(samples: list[dict[str, Any]], link: dict[str, Any] | None,
     gw_p90 = sorted(gw_ok)[int(len(gw_ok) * 0.9) - 1] if len(gw_ok) >= 10 else None
     spikes = sum(1 for v in gw_ok if v >= 50)
     quality = signal_quality(rssi)
-    weak = quality == "weak" or (snr is not None and snr < 20)
+    # Under 15 dB above the background noise is poor; 15-25 dB works fine for browsing.
+    weak = quality == "weak" or (snr is not None and snr < 15)
 
     stats = {"rssi": rssi, "snr": snr, "quality": quality, "gw_ms": gw_ms, "gw_loss": gw_loss,
              "gw_p90": gw_p90, "gw_spikes": spikes,
@@ -270,9 +343,24 @@ def diagnose(samples: list[dict[str, Any]], link: dict[str, Any] | None,
 
     sig = f"{rssi:.0f} dBm" if rssi is not None else "unknown"
     hog = ""
-    if mac_bps and mac_bps >= 2_000_000:
-        hog = f" This Mac is also using {mac_bps / 1e6:.1f} MB/s right now (see the Flows tab)."
+    busy_mac = (load >= 0.5) if load is not None else bool(mac_bps and mac_bps >= 2_000_000)
+    if busy_mac:
+        hog = (f" This Mac was moving up to {mac_bps / 1e6:.1f} MB/s in the last minute, which "
+               "is enough to cause this on its own: a big download or upload makes the router "
+               "queue everything else.")
 
+    if busy_mac and (gw_bad or gw_warn or net_bad or net_warn or spikes >= 2):
+        worst = max(gw_ok) if gw_ok else None
+        of = f" ({min(load, 1.0):.0%} of this network's speed)" if load is not None else ""
+        return {"level": "bad", "title": "This Mac is filling the connection", "stats": stats,
+                "detail": (f"This Mac was moving up to {mac_bps / 1e6:.1f} MB/s in the last "
+                           f"minute{of}, and the router slowed down to {ms(worst)} at the "
+                           "same time. A big download or upload makes the router queue "
+                           "everything else, so pages and calls on every device get slower. "
+                           f"The Wi-Fi itself is fine ({quality} signal, {sig})."),
+                "tips": ["Pause the download, upload, backup or stream and it clears up.",
+                         "The Flows tab and the alert show which app and server it is.",
+                         "If it's an update or backup, let it finish or run it overnight."]}
     if weak and (gw_bad or gw_warn):
         return {"level": "bad", "title": "Weak Wi-Fi signal", "stats": stats, "detail": (
             f"Your Mac hears the router at {sig}, which is weak, and the router takes "
@@ -307,11 +395,15 @@ def diagnose(samples: list[dict[str, Any]], link: dict[str, Any] | None,
             f"Most of the time the router answers in {ms(gw_ms)}, but in the last minute it "
             f"spiked to {worst:.0f} ms {spikes} times. Those spikes are what make pages hang and "
             "video calls stutter. The signal is "
-            f"{quality} ({sig}), so it's most likely another device grabbing the Wi-Fi in bursts, "
-            "or interference from nearby networks." + hog),
-            "tips": ["Check your router's app or admin page for a device using a lot of data.",
-                     "Watch the Flows tab during a spike to rule out this Mac.",
-                     "Try a different Wi-Fi channel, or the 5 GHz or 6 GHz band if you're on 2.4."]}
+            f"{quality} ({sig})" + (", so this Mac is the likely cause." + hog if busy_mac else
+            ", so it's most likely another device grabbing the Wi-Fi in bursts, or "
+            "interference from nearby networks.")),
+            "tips": (["Pause the download, upload or stream, and see if the spikes stop.",
+                      "The Flows tab shows which server it's going to."] if busy_mac else
+                     ["Check your router's app or admin page for a device using a lot of data.",
+                      "Watch the Flows tab during a spike to rule out this Mac.",
+                      "Try a different Wi-Fi channel, or the 5 GHz or 6 GHz band if you're on "
+                      "2.4."])}
     if weak:
         return {"level": "warn", "title": "Signal is on the weak side", "stats": stats,
                 "detail": (f"Your Mac hears the router at {sig}. It's working for now (router "

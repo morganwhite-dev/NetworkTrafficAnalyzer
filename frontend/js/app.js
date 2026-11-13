@@ -506,6 +506,7 @@ function onMessage(msg) {
       if (!msg.packets?.length) inspector.clear();
       if (msg.wifi) {
         state.wifi = msg.wifi;
+        charts.setLimit(msg.wifi.speed?.limit ? msg.wifi.speed.limit / 8 : null);
         if (state.tab === "wifi") wifi.update(msg.wifi);
       }
       break;
@@ -542,6 +543,7 @@ function onMessage(msg) {
       break;
     case "wifi":
       state.wifi = msg;
+      charts.setLimit(msg.speed?.limit ? msg.speed.limit / 8 : null);
       if (state.tab === "wifi") wifi.update(msg);
       break;
     default:

@@ -44,7 +44,8 @@ export function ago(seconds) {
   const s = Math.max(0, Math.round(seconds));
   if (s < 60) return `${s} s`;
   if (s < 3600) return `${Math.floor(s / 60)} min`;
-  return `${Math.floor(s / 3600)} h`;
+  if (s < 172800) return `${Math.floor(s / 3600)} h`;
+  return `${Math.floor(s / 86400)} days`;
 }
 
 export function truncate(s, n) {

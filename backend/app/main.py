@@ -29,6 +29,7 @@ from .interfaces import capture_access, list_interfaces, valid_iface
 from .pcapfile import PcapError, check_magic, iter_normalized, normalize_in_child
 from .pipeline import Pipeline
 from .security import SecurityMiddleware
+from .speedtest import SpeedTest
 from .textsafe import clean
 from .wifi import WifiMonitor
 
@@ -50,6 +51,7 @@ class Runtime:
     replayer: Replayer | None = None
     wifi: WifiMonitor | None = None
     apps: AppMap | None = None
+    speed: SpeedTest | None = None
     launch_url: str | None = None
     upload_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     mode_lock: asyncio.Lock = field(default_factory=asyncio.Lock)   # serialises source switches
@@ -224,6 +226,19 @@ def create_app(rt: Runtime) -> FastAPI:
             raise HTTPException(400, "That is not an IP address.") from exc
         local = await asyncio.to_thread(rt.pipeline.host_info, addr)
         return await asyncio.to_thread(ipinfo.lookup, addr, local, s.ip_lookup)
+
+    @app.post("/api/speedtest")
+    async def speedtest() -> dict[str, Any]:
+        """Run macOS's speed test once for the network you're on (only when asked)."""
+        if rt.speed is None or rt.wifi is None:
+            raise HTTPException(404, "The speed test isn't available here.")
+        if rt.wifi.network is None:
+            await asyncio.to_thread(rt.wifi.sample_once)
+        if not rt.speed.start(rt.wifi.network):
+            if rt.speed.running:
+                raise HTTPException(409, "A speed test is already running.")
+            raise HTTPException(409, rt.speed.error or "The speed test can't run right now.")
+        return rt.speed.summary(rt.wifi.network)
 
     @app.get("/api/packets/{pid}")
     async def packet(pid: int) -> dict[str, Any]:

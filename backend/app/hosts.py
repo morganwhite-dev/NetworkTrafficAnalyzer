@@ -202,7 +202,9 @@ class HostTracker:
             if name.endswith(".local"):          # mDNS: a LAN device announcing itself
                 self._remember_name(addr, name[:-6], overwrite=True)
             else:
-                self._remember_name(addr, name, overwrite=False)
+                # The name you asked for (media.licdn.com), not the CDN alias the answer
+                # ends on (media.licdn.com.cdn.cloudflare.net).
+                self._remember_name(addr, f.dns_qname or name, overwrite=False)
         if f.sni and f.dst:
             self._remember_name(f.dst, f.sni, overwrite=True)
         if f.http_host and f.dst:

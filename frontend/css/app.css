@@ -2234,3 +2234,44 @@ body:has(.drawer[data-open="true"]) main {
 .alert-row .explain .tips li {
   margin: 2px 0;
 }
+
+/* ---------- Wi-Fi tab: this network's speed ---------- */
+.wifi-speed {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--inset);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+.wifi-speed[hidden] {
+  display: none;
+}
+.wifi-speed .v-k {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.wifi-speed .ws-nums {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.wifi-speed .ws-nums b {
+  font-size: 16px;
+  color: var(--hi);
+  font-weight: 500;
+}
+.wifi-speed .ws-nums span {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-right: 10px;
+}
+.wifi-speed .ws-line {
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.wifi-speed .btn {
+  justify-self: start;
+}

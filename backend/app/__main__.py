@@ -97,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     from .pcapfile import PcapError, normalize_in_child
     from .pipeline import Pipeline
     from .privileges import PrivilegeError, drop_to_sudo_user, running_as_root
+    from .speedtest import SpeedTest
     from .wifi import WifiMonitor
 
     logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
@@ -144,6 +145,8 @@ def main(argv: list[str] | None = None) -> int:
     rt.apps.active = lambda: rt.pipeline.mode == "live" and rt.capturing
     pipeline.apps = rt.apps
     pipeline.wifi = rt.wifi
+    rt.speed = SpeedTest(s.data_dir)
+    rt.wifi.speed = rt.speed
 
     if s.replay:
         if not s.replay.exists():

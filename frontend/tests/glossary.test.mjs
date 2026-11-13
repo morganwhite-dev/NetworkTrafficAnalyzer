@@ -9,7 +9,7 @@ import {
 const KINDS = [
   "port_scan", "host_sweep", "cleartext_credentials", "cleartext_session", "traffic_spike",
   "bandwidth_hog", "arp_spoof", "mac_change", "dns_tunnel", "rogue_dhcp", "rogue_ra", "vpn_leak",
-  "slow_wifi", "slow_internet", "wifi_hiccups", "heavy_use",
+  "slow_wifi", "slow_internet", "wifi_hiccups", "heavy_use", "mac_busy",
 ];
 
 test("every alert kind explains what it means and what to do", () => {

@@ -100,3 +100,12 @@ test("long device names wrap onto two lines instead of being cut off", async () 
   assert.deepEqual(wrapName("Living-Room-TV", 12), ["Living-Room-", "TV"]);
   assert.equal(wrapName("Averyveryverylongname", 8).length, 2);
 });
+
+test("long server names keep their end, where the site's own name is", async () => {
+  const { shortHost } = await import("../js/netlayout.js");
+  assert.equal(shortHost("zoom.us", 26), "zoom.us");
+  assert.equal(shortHost("media.licdn.com.cdn.cloudflare.net", 26), "…com.cdn.cloudflare.net");
+  assert.equal(shortHost("a.b.cdn.platform.openai.com", 24), "…cdn.platform.openai.com");
+  assert.equal(shortHost("2620:149:1360:101::12", 26), "2620:149:1360:101::12");
+  assert.equal(shortHost("2620:149:1360:101::12", 10).length, 10);   // addresses: middle
+});

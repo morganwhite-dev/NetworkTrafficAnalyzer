@@ -1,6 +1,7 @@
 // Wi-Fi tab: one plain-language verdict, three numbers, and how they moved.
 
-import { el } from "./format.js";
+import { post } from "./api.js";
+import { ago, el, fmtRate } from "./format.js";
 
 const LEVEL_TEXT = {
   good: "LOOKS GOOD",
@@ -45,7 +46,19 @@ export class WifiView {
       el("dt", { text: "Signal" }), el("dd", { text: "above −67 dBm is fine. Weaker means move closer or add a mesh node." }),
       el("dt", { text: "Router" }), el("dd", { text: "under 15 ms is fine. Slow or spiky here = a Wi-Fi problem in your home." }),
       el("dt", { text: "Internet" }), el("dd", { text: "slow here while the router is fast = your modem or provider." }));
-    const left = el("div", { class: "wifi-left" }, this.verdict, this.linkRow, this.note, help);
+    this.speedBox = el("div", { class: "wifi-speed" });
+    this.speedBtn = el("button", { class: "btn", type: "button", text: "Test my speed" });
+    this.speedBtn.addEventListener("click", () => this.runSpeedTest());
+    this.speedMsg = null;
+    const left = el(
+      "div",
+      { class: "wifi-left" },
+      this.verdict,
+      this.speedBox,
+      this.linkRow,
+      this.note,
+      help,
+    );
     const right = el(
       "div",
       { class: "wifi-right" },
@@ -235,8 +248,79 @@ export class WifiView {
     return d === 0 ? "now" : `${d}s`;
   }
 
+  async runSpeedTest() {
+    this.speedBtn.disabled = true;
+    this.speedBtn.textContent = "Testing…";
+    try {
+      this.renderSpeed(await post("/api/speedtest"));
+    } catch (err) {
+      this.speedBtn.disabled = false;
+      this.speedBtn.textContent = "Test my speed";
+      this.speedErr = err.message;
+      this.renderSpeed(this.lastSpeed);
+    }
+  }
+
+  /** "Your connection": this network's measured speed, remembered per network. */
+  renderSpeed(sp) {
+    this.lastSpeed = sp;
+    if (!sp || !sp.available) {
+      this.speedBox.hidden = true;
+      return;
+    }
+    this.speedBox.hidden = false;
+    const mbps = (bits) => `${bits >= 1e8 ? Math.round(bits / 1e6) : (bits / 1e6).toFixed(1)} Mbps`;
+    const kids = [el("div", { class: "v-k", text: "THIS NETWORK'S SPEED" })];
+    if (sp.running) {
+      kids.push(
+        el("div", {
+          class: "ws-line",
+          text: "Testing… about 20 seconds. It downloads a few hundred MB from Apple, so everything else will feel slow for a moment.",
+        }),
+      );
+    } else if (sp.last) {
+      const age = ago(Date.now() / 1000 - sp.last.t);
+      kids.push(
+        el(
+          "div",
+          { class: "ws-nums" },
+          el("b", { text: mbps(sp.last.down) }),
+          el("span", { text: "down" }),
+          el("b", { text: mbps(sp.last.up || 0) }),
+          el("span", { text: "up" }),
+        ),
+        el("div", {
+          class: "ws-line",
+          text:
+            `Tested ${age} ago on this network.` +
+            (sp.tests > 1 && sp.limit > sp.last.down * 1.15
+              ? ` Best recent result: ${mbps(sp.limit)}, which is what the alerts and the Traffic chart use.`
+              : " The alerts and the Traffic chart use it to tell how close you are to the limit."),
+        }),
+      );
+    } else {
+      kids.push(
+        el("div", {
+          class: "ws-line",
+          text: "Not tested on this network yet. Test once and the app remembers it here, so it can tell you when this Mac is using most of the connection. Each place you connect is remembered separately.",
+        }),
+      );
+    }
+    if (this.speedErr && !sp.running) {
+      kids.push(el("div", { class: "ws-line t-alert", text: this.speedErr }));
+      this.speedErr = null;
+    } else if (sp.error && !sp.running) {
+      kids.push(el("div", { class: "ws-line t-alert", text: sp.error }));
+    }
+    this.speedBtn.disabled = !!sp.running;
+    this.speedBtn.textContent = sp.running ? "Testing…" : sp.last ? "Test again" : "Test my speed";
+    kids.push(this.speedBtn);
+    this.speedBox.replaceChildren(...kids);
+  }
+
   update(msg) {
     if (!msg) return;
+    this.renderSpeed(msg.speed);
     this.ensureCharts();
     const v = msg.verdict || {};
     const s = v.stats || {};

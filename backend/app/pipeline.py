@@ -149,6 +149,15 @@ class Pipeline:
             if self.mode in ("live", "replay"):
                 self.engine.advance(time.time())
 
+    def mac_peak(self, now: float | None = None) -> float:
+        """This Mac's busiest 5 seconds in the last minute, in bytes/s. The Wi-Fi verdict
+        covers the last minute, so "was this Mac busy?" has to look at the same minute."""
+        with self.lock:
+            vals = [v for _, v in self.stats.timeline(now or self.now(), 60)]
+        if len(vals) < 5:
+            return 0.0
+        return max(sum(vals[i:i + 5]) / 5 for i in range(len(vals) - 4))
+
     def health_check(self, wifi: dict[str, Any]) -> None:
         """Once a second during a live capture: raise or end the slow-network alerts."""
         with self.lock:
@@ -156,7 +165,7 @@ class Pipeline:
                 return
             now = time.time()
             mac_bps = self.hosts.total_in_window(now, 10) / 10
-            self.health.check(now, wifi, mac_bps)
+            self.health.check(now, wifi, mac_bps, self.mac_peak(now))
 
     def take_outbox(self) -> tuple[list[dict[str, Any]], int, list[dict[str, Any]]]:
         with self.lock:

@@ -1,6 +1,6 @@
 // Bandwidth line chart (Chart.js, vendored) and the protocol share bar.
 
-import { el, fmtCount, fmtRate } from "./format.js";
+import { el, fmtCount, fmtPct, fmtRate } from "./format.js";
 import { protoTip } from "./glossary.js";
 
 export const PROTO_COLORS = {
@@ -83,6 +83,16 @@ export class Charts {
               borderColor: (s) =>
                 this.spikeSet.has(s.p1DataIndex) ? "#ff003c" : undefined,
             },
+          },
+          {
+            // This network's measured speed (from the Wi-Fi tab's speed test).
+            data: [],
+            borderColor: "rgba(0,243,255,.55)",
+            borderWidth: 1,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false,
+            hidden: true,
           },
         ],
       },
@@ -170,15 +180,33 @@ export class Charts {
     ds.datasets[0].data = this.values.map((v, i) =>
       first === -1 || i < first ? null : v,
     );
-    this.bw.update("none");
     const peak = Math.max(0, ...this.values);
     const now = this.values[this.values.length - 1] || 0;
+    // The limit line only shows once traffic gets near it; drawn all the time it would
+    // squash everyday traffic flat against the bottom of the chart.
+    const limit = this.fileMode ? null : this.limit;
+    const line = ds.datasets[1];
+    line.hidden = !limit || peak < 0.25 * limit;
+    line.data = line.hidden ? [] : this.values.map(() => limit);
+    this.bw.update("none");
+    const ofLimit = limit ? ` · ${fmtPct(now / limit)} OF YOUR ${fmtRate(limit)}` : "";
     this.bwStat.textContent =
       first === -1
         ? "COLLECTING…"
         : this.fileMode
           ? `PEAK ${fmtRate(peak)}`
-          : `NOW ${fmtRate(now)} · PEAK ${fmtRate(peak)}`;
+          : `NOW ${fmtRate(now)}${ofLimit} · PEAK ${fmtRate(peak)}`;
+    this.bwStat.dataset.tip = limit
+      ? `Your speed test on this network measured ${fmtRate(limit)}. The dashed line shows it once traffic gets close.`
+      : "Run the speed test on the Wi-Fi tab to see how close you are to this network's limit.";
+  }
+
+  /** This network's measured download speed in bytes/s, or null if it hasn't been tested. */
+  setLimit(bps) {
+    const v = bps || null;
+    if (v === this.limit) return;
+    this.limit = v;
+    if (this.times) this.redraw();
   }
 
   setProtocols(counts) {

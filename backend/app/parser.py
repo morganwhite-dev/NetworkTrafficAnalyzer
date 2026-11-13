@@ -82,6 +82,7 @@ class Facts:
     dns_query: tuple[str, str] | None = None
     dns_response: bool = False
     dns_answers: list[tuple[str, str]] = field(default_factory=list)
+    dns_qname: str = ""            # the name that was asked for (answers may be CDN aliases)
     sni: str | None = None
     http_host: str | None = None
     icmp_type: int | None = None
@@ -176,6 +177,7 @@ def _dns(f: Facts, dns: DNS) -> None:
         f.info = f"Query {qtype} {qname}".strip()
         return
     f.dns_response = True
+    f.dns_qname = qname
     try:
         for rr in list(dns.an or [])[:32]:
             if int(rr.type) in (1, 28):

@@ -235,3 +235,14 @@ export function wrapName(s, n) {
   const rest = str.slice(at).trim();
   return [str.slice(0, at).trim(), rest.length > n ? `${rest.slice(0, n - 1)}…` : rest];
 }
+
+/** A long host name loses its front labels, not its end: "…platform.openai.com". */
+export function shortHost(s, n) {
+  const str = String(s ?? "");
+  if (str.length <= n) return str;
+  if (/^[0-9a-f:.]+$/i.test(str) || !str.includes(".")) return fitMiddle(str, n);
+  const parts = str.split(".");
+  while (parts.length > 2 && parts.join(".").length + 1 > n) parts.shift();
+  const out = parts.join(".");
+  return out.length + 1 <= n ? `…${out}` : `${str.slice(0, n - 1)}…`;
+}

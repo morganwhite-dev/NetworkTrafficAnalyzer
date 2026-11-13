@@ -104,6 +104,11 @@ export const ALERT_INFO = {
       "Most of the time the Wi-Fi is quick, but now and then the router takes a long time to answer. Those moments are when pages hang and calls freeze.",
     todo: "Usually another device grabbing the Wi-Fi in bursts, or interference. Moving closer to the router helps.",
   },
+  mac_busy: {
+    means:
+      "Everything is slow because this Mac is using most of the connection. The Wi-Fi and the internet are fine: they're just full.",
+    todo: "See the tips above. Pausing the big transfer fixes it straight away.",
+  },
   heavy_use: {
     means:
       "This Mac is moving a lot of data, enough to slow the connection for everything else on it.",
@@ -143,6 +148,7 @@ export function alertNumbers(alert, labelFor = (ip) => ip) {
       break;
     case "slow_wifi":
     case "slow_internet":
+    case "mac_busy":
     case "wifi_hiccups":
       out.push({ value: ms(d.gw_ms), label: "router", red: alert.kind === "slow_wifi" });
       out.push({ value: ms(d.net_ms), label: "internet", red: alert.kind === "slow_internet" });
@@ -152,7 +158,8 @@ export function alertNumbers(alert, labelFor = (ip) => ip) {
     case "heavy_use":
       if (d.bps != null) out.push({ value: fmtRate(d.bps), label: "this Mac", red: true });
       if (d.peak != null) out.push({ value: fmtRate(d.peak), label: "peak" });
-      if (d.of_link != null) out.push({ value: fmtPct(d.of_link), label: "of Wi-Fi link" });
+      if (d.of_limit != null) out.push({ value: fmtPct(Math.min(1, d.of_limit)), label: "of your speed" });
+      else if (d.of_link != null) out.push({ value: fmtPct(d.of_link), label: "of Wi-Fi link" });
       break;
     case "port_scan":
       if (d.ports != null) out.push({ value: String(d.ports), label: "ports probed", red: true });
